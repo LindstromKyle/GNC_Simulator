@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from GNC_Simulator.utils import rotate_vector_by_quaternion
+from utils import rotate_vector_by_quaternion
 
 
 class Vehicle:

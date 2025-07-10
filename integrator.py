@@ -15,14 +15,15 @@ def integrate_rk4(vehicle, environment, initial_state, t_0, t_final, delta_t):
         h = min(delta_t, t_final - current_time)
 
         # Calculate intermediate slopes
-        k1 = h * calculate_dynamics(current_time, current_state, vehicle, environment)
-        k2 = h * calculate_dynamics(current_time + h / 2, current_state + k1 / 2, vehicle, environment)
-        k3 = h * calculate_dynamics(current_time + h / 2, current_state + k2 / 2, vehicle, environment)
-        k4 = h * calculate_dynamics(current_time + h, current_state + k3, vehicle, environment)
+        k_1 = calculate_dynamics(current_time, current_state, vehicle, environment)
+        k_2 = calculate_dynamics(current_time + h / 2, current_state + k_1 / 2, vehicle, environment)
+        k_3 = calculate_dynamics(current_time + h / 2, current_state + k_2 / 2, vehicle, environment)
+        k_4 = calculate_dynamics(current_time + h, current_state + k_3, vehicle, environment)
 
         # Update state and time
-        current_state = current_state + (k1 + 2*k2 + 2*k3 + k4) / 6
-        current_time = current_time + h
+        weighted_average = (k_1 + 2*k_2 + 2*k_3 + k_4) / 6
+        current_state += h * weighted_average
+        current_time += h
 
         # Append state and time to results
         t_values.append(current_time)

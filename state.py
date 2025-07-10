@@ -14,7 +14,7 @@ class State:
         self.position = np.array(position)
         self.velocity = np.array(velocity)
         self.quaternion = Rotation.from_quat(quaternion).as_quat()
-        self.omega = np.array(angular_velocity)
+        self.angular_velocity = np.array(angular_velocity)
 
 
     def as_vector(self):
@@ -22,5 +22,5 @@ class State:
             self.position,
             self.velocity,
             self.quaternion,
-            self.omega
+            self.angular_velocity
         ])
