@@ -24,8 +24,10 @@ def calculate_dynamics(time, state, vehicle, environment):
     quaternion_derivative = compute_quaternion_derivative(quaternion, angular_velocity)
 
     # Angular dynamics
-    moment_of_inertia = vehicle.inertia
-    torque = np.array([0, 0, 0])  # Start with no torque
-    angular_acceleration = np.linalg.inv(moment_of_inertia) @ (torque - np.cross(angular_velocity, moment_of_inertia @ angular_velocity))
+    moment_of_inertia = vehicle.moment_of_inertia
+    torque = np.array([0, 0, 0]) # Start with no torque
+    angular_momentum = moment_of_inertia @ angular_velocity
+    gyroscopic_reaction_torque = np.cross(angular_velocity, angular_momentum)
+    angular_acceleration = np.linalg.inv(moment_of_inertia) @ (torque - gyroscopic_reaction_torque)
 
     return np.concatenate([velocity, acceleration, quaternion_derivative, angular_acceleration])

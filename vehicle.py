@@ -12,7 +12,7 @@ class Vehicle:
                  prop_mass,
                  thrust_magnitude,
                  burn_time,
-                 inertia,
+                 moment_of_inertia,
                  drag_coefficient,
                  cross_sectional_area,
 
@@ -23,7 +23,7 @@ class Vehicle:
         self.prop_mass = prop_mass
         self.thrust_magnitude = thrust_magnitude
         self.burn_time = burn_time
-        self.inertia = inertia
+        self.moment_of_inertia = moment_of_inertia
         self.drag_coefficient = drag_coefficient
         self.cross_sectional_area = cross_sectional_area
 

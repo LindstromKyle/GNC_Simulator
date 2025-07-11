@@ -15,7 +15,7 @@ def run_simulator():
                       prop_mass=100,
                       thrust_magnitude=2000,
                       burn_time=10,
-                      inertia=np.diag([100, 100, 10]),
+                      moment_of_inertia=np.diag([100, 100, 10]),
                       drag_coefficient=0.5,
                       cross_sectional_area=0.1,
                       )
