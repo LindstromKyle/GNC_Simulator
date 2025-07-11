@@ -13,7 +13,8 @@ class Vehicle:
                  thrust_magnitude,
                  burn_time,
                  moment_of_inertia,
-                 drag_coefficient,
+                 base_drag_coefficient,
+                 drag_scaling_coefficient,
                  cross_sectional_area,
 
                  ):
@@ -24,7 +25,8 @@ class Vehicle:
         self.thrust_magnitude = thrust_magnitude
         self.burn_time = burn_time
         self.moment_of_inertia = moment_of_inertia
-        self.drag_coefficient = drag_coefficient
+        self.base_drag_coefficient = base_drag_coefficient
+        self.drag_scaling_coefficient = drag_scaling_coefficient
         self.cross_sectional_area = cross_sectional_area
 
     def mass(self, time):

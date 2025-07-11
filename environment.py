@@ -2,6 +2,8 @@
 
 import numpy as np
 
+from utils import rotate_vector_by_quaternion
+
 
 class Environment:
     def __init__(self):
@@ -23,7 +25,8 @@ class Environment:
         scale_height = 8500
         return sea_level_density * np.exp(-1 * altitude / scale_height)
 
-    def drag_force(self, position, velocity, vehicle):
+    def drag_force(self, position, velocity, vehicle, quaternion):
+
         altitude = np.linalg.norm(position) - self.earth_radius
 
         # Protect against divide by zero
@@ -37,6 +40,23 @@ class Environment:
         if velocity_magnitude < 1e-3:
             return np.zeros(3)
 
+        # Direction of drag force (opposite of velocity)
         drag_unit_vector = -velocity / velocity_magnitude
-        drag_magnitude = 0.5 * density * (velocity_magnitude ** 2) * vehicle.drag_coefficient * vehicle.cross_sectional_area
+
+        # Transform body frame Z axis to inertial frame
+        body_frame_z_axis = np.array([0, 0, 1])
+        inertial_frame_z_axis = rotate_vector_by_quaternion(body_frame_z_axis, quaternion)
+
+        # Compute angle of attack (radians)
+        cos_alpha = np.dot(velocity, inertial_frame_z_axis) / velocity_magnitude
+        # Clamp for numerical safety
+        cos_alpha = np.clip(cos_alpha, -1.0, 1.0)
+        angle_of_attack = np.arccos(cos_alpha)
+
+        # Adjust drag coefficient based on AoA
+        total_drag_coefficient = vehicle.base_drag_coefficient + vehicle.drag_scaling_coefficient * np.sin(angle_of_attack) ** 2
+
+        # Compute drag magnitude
+        drag_magnitude = 0.5 * density * velocity_magnitude ** 2 * total_drag_coefficient * vehicle.cross_sectional_area
+
         return drag_magnitude * drag_unit_vector

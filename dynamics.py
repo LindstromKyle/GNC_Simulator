@@ -15,7 +15,7 @@ def calculate_dynamics(time, state, vehicle, environment):
     # Forces
     thrust_force = vehicle.thrust_vector(time, quaternion)
     gravitational_force = environment.gravitational_force(position, vehicle_mass)
-    drag_force = environment.drag_force(position, velocity, vehicle)
+    drag_force = environment.drag_force(position, velocity, vehicle, quaternion)
     net_force = thrust_force + gravitational_force + drag_force
 
     acceleration = net_force / vehicle_mass

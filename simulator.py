@@ -16,7 +16,8 @@ def run_simulator():
                       thrust_magnitude=2000,
                       burn_time=10,
                       moment_of_inertia=np.diag([100, 100, 10]),
-                      drag_coefficient=0.5,
+                      base_drag_coefficient=0.2,
+                      drag_scaling_coefficient=0.8,
                       cross_sectional_area=0.1,
                       )
 
