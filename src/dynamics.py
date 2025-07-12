@@ -1,9 +1,9 @@
-
-
 import numpy as np
+import logging
+
 from utils import compute_quaternion_derivative
 
-def calculate_dynamics(time, state, vehicle, environment):
+def calculate_dynamics(time, state, vehicle, environment, log):
     position = state[0:3]
     velocity = state[3:6]
     quaternion = state[6:10]
@@ -25,9 +25,16 @@ def calculate_dynamics(time, state, vehicle, environment):
 
     # Angular dynamics
     moment_of_inertia = vehicle.moment_of_inertia
-    torque = np.array([0, 0, 0]) # Start with no torque
+    thrust_vector_torque = np.array([0, 0, 0]) # Start with no torque
+    aerodynamic_torque = environment.aerodynamic_torque(position, velocity, quaternion, angular_velocity, vehicle)
+    total_torque = thrust_vector_torque + aerodynamic_torque
     angular_momentum = moment_of_inertia @ angular_velocity
     gyroscopic_reaction_torque = np.cross(angular_velocity, angular_momentum)
-    angular_acceleration = np.linalg.inv(moment_of_inertia) @ (torque - gyroscopic_reaction_torque)
+    angular_acceleration = np.linalg.inv(moment_of_inertia) @ (total_torque - gyroscopic_reaction_torque)
+
+    # Log state evolution
+    if log:
+        logging.info(f"t={time:.2f}s | pos={position} | vel={velocity} | acc={acceleration}")
+        logging.info(f"mass={vehicle_mass:.2f} | thrust={thrust_force} | drag={drag_force} | gravity={gravitational_force}")
 
     return np.concatenate([velocity, acceleration, quaternion_derivative, angular_acceleration])

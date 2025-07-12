@@ -60,3 +60,11 @@ class Environment:
         drag_magnitude = 0.5 * density * velocity_magnitude ** 2 * total_drag_coefficient * vehicle.cross_sectional_area
 
         return drag_magnitude * drag_unit_vector
+
+    def aerodynamic_torque(self, position, velocity, quaternion, angular_velocity, vehicle):
+        # Get control surface deflections
+        deflections = vehicle.get_grid_fin_deflections(time=None, state=None)
+
+        # Eventually add angle of attack math here for cross-sectional area
+        # Placeholder: return zero for now
+        return np.zeros(3)

@@ -16,7 +16,6 @@ class Vehicle:
                  base_drag_coefficient,
                  drag_scaling_coefficient,
                  cross_sectional_area,
-
                  ):
 
 
@@ -28,6 +27,20 @@ class Vehicle:
         self.base_drag_coefficient = base_drag_coefficient
         self.drag_scaling_coefficient = drag_scaling_coefficient
         self.cross_sectional_area = cross_sectional_area
+
+        self.grid_fin_deflections = {
+            "Fin 1" : 0.0,
+            "Fin 2" : 0.0,
+            "Fin 3" : 0.0,
+            "Fin 4" : 0.0
+        }
+
+    def get_grid_fin_deflections(self, time, state):
+        """
+        Placeholder for future control logic.
+        Return a dict of surface angles (in radians).
+        """
+        return self.grid_fin_deflections
 
     def mass(self, time):
         if time < self.burn_time:

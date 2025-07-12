@@ -7,6 +7,14 @@ from state import State
 from integrator import integrate_rk4
 from utils import compute_acceleration
 
+import logging
+
+logging.basicConfig(
+    filename="simulation.log",
+    level=logging.INFO,  # Use DEBUG for more detail
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    filemode="w"  # Overwrite log file each run
+)
 
 def run_simulator():
 
@@ -41,7 +49,8 @@ def run_simulator():
         initial_state=initial_state.as_vector(),
         t_0=0,
         t_final=30,
-        delta_t=0.05
+        delta_t=0.05,
+        log_interval=0.5
     )
 
     # Plot altitude vs time
