@@ -3,7 +3,7 @@ import logging
 
 from utils import compute_quaternion_derivative
 
-def calculate_dynamics(time, state, vehicle, environment, log):
+def calculate_dynamics(time, state, vehicle, environment, log_flag, controller=None):
     position = state[0:3]
     velocity = state[3:6]
     quaternion = state[6:10]
@@ -12,8 +12,15 @@ def calculate_dynamics(time, state, vehicle, environment, log):
     # Mass
     vehicle_mass = vehicle.mass(time)
 
+    # Controller logic
+    if controller:
+        controls = controller.update(time, state)
+        gimbal_angles = controls.get('gimbal_angles', np.zeros(2))
+    else:
+        gimbal_angles = np.zeros(2)
+
     # Forces
-    thrust_force = vehicle.thrust_vector(time, quaternion)
+    thrust_force, thrust_vector_torque = vehicle.thrust_vector(time, quaternion, gimbal_angles)
     gravitational_force = environment.gravitational_force(position, vehicle_mass)
     drag_force = environment.drag_force(position, velocity, vehicle, quaternion)
     net_force = thrust_force + gravitational_force + drag_force
@@ -25,7 +32,6 @@ def calculate_dynamics(time, state, vehicle, environment, log):
 
     # Angular dynamics
     moment_of_inertia = vehicle.moment_of_inertia
-    thrust_vector_torque = np.array([0, 0, 0]) # Start with no torque
     aerodynamic_torque = environment.aerodynamic_torque(position, velocity, quaternion, angular_velocity, vehicle)
     total_torque = thrust_vector_torque + aerodynamic_torque
     angular_momentum = moment_of_inertia @ angular_velocity
@@ -33,8 +39,10 @@ def calculate_dynamics(time, state, vehicle, environment, log):
     angular_acceleration = np.linalg.inv(moment_of_inertia) @ (total_torque - gyroscopic_reaction_torque)
 
     # Log state evolution
-    if log:
+    if log_flag:
         logging.info(f"t={time:.2f}s | pos={position} | vel={velocity} | acc={acceleration}")
-        logging.info(f"mass={vehicle_mass:.2f} | thrust={thrust_force} | drag={drag_force} | gravity={gravitational_force}")
+        logging.info(f"thrust={thrust_force} | drag={drag_force} | gravity={gravitational_force} | net force={net_force}")
+        logging.info(f"quaternion={quaternion} | total torque={total_torque} | angular_velocity={angular_velocity}")
+        logging.info(f"mass={vehicle_mass:.2f}")
 
     return np.concatenate([velocity, acceleration, quaternion_derivative, angular_acceleration])

@@ -1,13 +1,13 @@
 import numpy as np
-import matplotlib.pyplot as plt
+import logging
+from dataclasses import asdict
 
+from controller import PIDAttitudeController
+from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration
 from vehicle import Vehicle
 from environment import Environment
 from state import State
 from integrator import integrate_rk4
-from utils import compute_acceleration
-
-import logging
 
 logging.basicConfig(
     filename="simulation.log",
@@ -16,18 +16,57 @@ logging.basicConfig(
     filemode="w"  # Overwrite log file each run
 )
 
-def run_simulator():
 
+class Simulator:
+    def __init__(self, vehicle, environment, initial_state, t_0=0, t_final=2000, delta_t=0.5, log_interval=1):
+        self.vehicle = vehicle
+        self.environment = environment
+        self.initial_state = initial_state
+        self.t_0 = t_0
+        self.t_final = t_final
+        self.delta_t = delta_t
+        self.log_interval = log_interval
+        self.controller = None  # To be set later
+
+    def add_controller(self, controller):
+        self.controller = controller
+
+    def run(self):
+        print(f"Integrating...")
+        t_vals, state_vals = integrate_rk4(vehicle=self.vehicle,
+            environment=self.environment,
+            initial_state=self.initial_state.as_vector(),
+            t_0=self.t_0,
+            t_final=self.t_final,
+            delta_t=self.delta_t,
+            log_interval=self.log_interval,
+            controller=self.controller
+        )
+
+        return t_vals, state_vals
+
+    def plot_1D(self, t_vals, state_vals, axis):
+        # Plot 1D params
+        plot_1D_position_velocity_acceleration(t_vals, state_vals, axis, self.environment)
+
+    def plot_3D(self, t_vals, state_vals):
+        # Plot 3D Trajectory
+        plot_3D_trajectory(t_vals, state_vals)
+
+if __name__ == "__main__":
     print(f"Initializing Vehicle...")
-    vehicle = Vehicle(dry_mass=50,
-                      prop_mass=100,
-                      thrust_magnitude=2000,
-                      burn_time=10,
-                      moment_of_inertia=np.diag([100, 100, 10]),
-                      base_drag_coefficient=0.2,
-                      drag_scaling_coefficient=0.8,
-                      cross_sectional_area=0.1,
+    vehicle = Vehicle(dry_mass=25600,
+                      prop_mass=395700,
+                      thrust_magnitude=7200000,
+                      burn_time=162,
+                      moment_of_inertia=np.diag([470297,470297,705445]),
+                      base_drag_coefficient=0.3,
+                      drag_scaling_coefficient=2.0,
+                      cross_sectional_area=10.5,
+                      engine_gimbal_limit=10.0,
+                      engine_gimbal_arm=18.0
                       )
+
 
     print(f"Initializing Environment...")
     environment = Environment()
@@ -40,59 +79,31 @@ def run_simulator():
         quaternion=[1, 0, 0, 0],
         angular_velocity=[0, 0, 0]
     )
+    # sim = Simulator(vehicle=vehicle,
+    #                 environment=environment,
+    #                 initial_state=initial_state,
+    #                 t_0=0,
+    #                 t_final=2000,
+    #                 delta_t=0.5,
+    #                 log_interval=1)
+    sim = Simulator(vehicle=vehicle,
+                    environment=environment,
+                    initial_state=initial_state,
+                    t_0=0,
+                    t_final=30,
+                    delta_t=0.1,
+                    log_interval=0.5)
 
-    print(f"Integrating...")
-    # Integrate with RK4
-    t_vals, state_vals = integrate_rk4(
-        vehicle=vehicle,
-        environment=environment,
-        initial_state=initial_state.as_vector(),
-        t_0=0,
-        t_final=30,
-        delta_t=0.05,
-        log_interval=0.5
+    controller = PIDAttitudeController(
+        kp=np.array([100.0, 100.0, 50.0]), ki=np.zeros(3), kd=np.array([10.0, 10.0, 5.0]),
+        desired_quaternion=np.array([0.9990, 0.0, 0.0436, 0.0]),  # e.g., ~5° pitch (use Rotation.as_quat)
+        vehicle=sim.vehicle
     )
 
-    # Plot altitude vs time
-    fig, axs = plt.subplots(3)
+    sim.add_controller(controller)
 
-    altitude_z = state_vals[:, 2] - environment.earth_radius
-    axs[0].plot(t_vals, altitude_z)
-    axs[0].set_xlabel("Time (s)")
-    axs[0].set_ylabel("Altitude Above Surface (m)")
-    axs[0].set_title("Altitude vs Time")
-    axs[0].grid()
+    t_vals, state_vals = sim.run()
 
-    velocity_z = state_vals[:, 5]
-    axs[1].plot(t_vals, velocity_z)
-    axs[1].set_xlabel("Time (s)")
-    axs[1].set_ylabel("Velocity (m/s)")
-    axs[1].set_title("Velocity vs Time")
-    axs[1].grid()
-    axs[1].sharex(axs[0])
+    sim.plot_1D(t_vals, state_vals, "Z")
 
-    acceleration = compute_acceleration(t_vals, velocity_z)
-    axs[2].plot(t_vals, acceleration)
-    axs[2].set_xlabel("Time (s)")
-    axs[2].set_ylabel("Acceleration (m/s^2)")
-    axs[2].set_title("Acceleration vs Time")
-    axs[2].grid()
-    axs[2].sharex(axs[0])
-
-    # drag_vals = np.array([
-    #     np.linalg.norm(environment.drag_force(p, v, vehicle))
-    #     for p, v in zip(state_vals[:, 2], state_vals[:, 5])
-    # ])
-    # axs[2].plot(t_vals, drag_vals)
-    # axs[2].set_xlabel("Time (s)")
-    # axs[2].set_ylabel("Acceleration (m/s^2)")
-    # axs[2].set_title("Acceleration vs Time")
-    # axs[2].grid()
-    # axs[2].sharex(axs[0])
-
-    plt.tight_layout()
-    plt.show()
-
-
-if __name__ == "__main__":
-    run_simulator()
+    sim.plot_3D(t_vals, state_vals)

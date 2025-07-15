@@ -1,5 +1,3 @@
-
-
 import numpy as np
 
 from utils import rotate_vector_by_quaternion
