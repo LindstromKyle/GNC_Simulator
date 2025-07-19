@@ -58,7 +58,7 @@ def integrate_rk4(vehicle, environment, initial_state, t_0, t_final, delta_t, lo
         current_time += h
 
         # Normalize quaternion to prevent drift
-        current_state[6:10] = np.linalg.norm(current_state[6:10])
+        current_state[6:10] /= np.linalg.norm(current_state[6:10])
 
         # Append state and time to results
         t_values.append(current_time)

@@ -4,6 +4,7 @@ from dataclasses import asdict
 
 from controller import PIDAttitudeController
 from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration
+from utils import quat_to_angle_axis
 from vehicle import Vehicle
 from environment import Environment
 from state import State
@@ -90,12 +91,14 @@ if __name__ == "__main__":
                     environment=environment,
                     initial_state=initial_state,
                     t_0=0,
-                    t_final=30,
+                    t_final=161,
                     delta_t=0.1,
                     log_interval=0.5)
 
     controller = PIDAttitudeController(
-        kp=np.array([100.0, 100.0, 50.0]), ki=np.zeros(3), kd=np.array([10.0, 10.0, 5.0]),
+        kp=np.array([5000.0, 5000.0,25000.0]),
+        ki=np.zeros(3),
+        kd=np.array([1e6, 1e6, 5e5]),
         desired_quaternion=np.array([0.9990, 0.0, 0.0436, 0.0]),  # e.g., ~5° pitch (use Rotation.as_quat)
         vehicle=sim.vehicle
     )
@@ -107,3 +110,21 @@ if __name__ == "__main__":
     sim.plot_1D(t_vals, state_vals, "Z")
 
     sim.plot_3D(t_vals, state_vals)
+
+    # Plot yaw angle
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots()
+
+    quats = state_vals[:, 6:10]
+    yaws = []
+    for quat in quats:
+        angle_axis = quat_to_angle_axis(quat)
+        angle = np.degrees(angle_axis[0])
+        yaws.append(angle)
+    ax.plot(t_vals, yaws)
+    ax.axhline(5, color='r')
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Yaw (Degrees)")
+    ax.set_title("Yaw vs Time")
+    ax.grid()
+    plt.show()
