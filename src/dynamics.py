@@ -16,7 +16,7 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controller=N
     # Controller logic
     if controller:
         controls = controller.update(time, state)
-        gimbal_angles = controls.get('engine_gimbal_angles', np.zeros(2))
+        gimbal_angles = controls.get("engine_gimbal_angles", np.zeros(2))
     else:
         gimbal_angles = np.zeros(2)
 
@@ -42,9 +42,13 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controller=N
     # Log state evolution
     if log_flag:
         logging.info(f"t={time:.2f}s | pos={position} | vel={velocity} | acc={acceleration}")
-        logging.info(f"thrust={thrust_force} | drag={drag_force} | gravity={gravitational_force} | net force={net_force}")
+        logging.info(
+            f"thrust={thrust_force} | drag={drag_force} | gravity={gravitational_force} | net force={net_force}"
+        )
         logging.info(f"quat={quaternion} | attitude(Z)={rotate_vector_by_quaternion(np.array([0,0,1]), quaternion)}")
-        logging.info(f"total torque={total_torque} | angular_velocity={angular_velocity} | ang_accel={angular_acceleration}")
+        logging.info(
+            f"total torque={total_torque} | angular_velocity={angular_velocity} | ang_accel={angular_acceleration}"
+        )
         logging.info(f"mass={vehicle_mass:.2f}")
         logging.info(f"")
 

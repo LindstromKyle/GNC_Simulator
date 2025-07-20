@@ -16,7 +16,7 @@ class Environment:
         if radius < 1e-3:
             return np.zeros(3)
 
-        return (-1 * self.gravitational_constant * self.earth_mass * vehicle_mass * position) / (radius ** 3)
+        return (-1 * self.gravitational_constant * self.earth_mass * vehicle_mass * position) / (radius**3)
 
     def atmospheric_density(self, altitude):
         sea_level_density = 1.225
@@ -52,10 +52,12 @@ class Environment:
         angle_of_attack = np.arccos(cos_alpha)
 
         # Adjust drag coefficient based on AoA
-        total_drag_coefficient = vehicle.base_drag_coefficient + vehicle.drag_scaling_coefficient * np.sin(angle_of_attack) ** 2
+        total_drag_coefficient = (
+            vehicle.base_drag_coefficient + vehicle.drag_scaling_coefficient * np.sin(angle_of_attack) ** 2
+        )
 
         # Compute drag magnitude
-        drag_magnitude = 0.5 * density * velocity_magnitude ** 2 * total_drag_coefficient * vehicle.cross_sectional_area
+        drag_magnitude = 0.5 * density * velocity_magnitude**2 * total_drag_coefficient * vehicle.cross_sectional_area
 
         return drag_magnitude * drag_unit_vector
 

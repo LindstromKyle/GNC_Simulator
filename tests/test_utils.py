@@ -1,7 +1,13 @@
 import numpy as np
 
-from utils import rotate_vector_by_quaternion, angle_axis_to_quat, quaternion_multiply, quaternion_inverse, \
-    quat_to_angle_axis, get_rotated_basis_from_quat
+from utils import (
+    rotate_vector_by_quaternion,
+    angle_axis_to_quat,
+    quaternion_multiply,
+    quaternion_inverse,
+    quat_to_angle_axis,
+    get_rotated_basis_from_quat,
+)
 
 
 def test_rotate_vector_by_quaternion_identity():
@@ -18,12 +24,13 @@ def test_angle_axis_to_quat_rotation():
 
     assert np.allclose(rotated_vector, np.array([0.5, 0.5, 0.70710678]))
 
+
 def test_error_quat_1():
-    current_angle_axis = np.array([np.pi/4, -1, 1, 0])
+    current_angle_axis = np.array([np.pi / 4, -1, 1, 0])
     current_quat = angle_axis_to_quat(current_angle_axis)
     current_vector = rotate_vector_by_quaternion(np.array([0, 0, 1]), current_quat)
 
-    desired_angle_axis = np.array([np.pi/2, -1, 1, 0])
+    desired_angle_axis = np.array([np.pi / 2, -1, 1, 0])
     desired_quat = angle_axis_to_quat(desired_angle_axis)
     desired_vector = rotate_vector_by_quaternion(np.array([0, 0, 1]), desired_quat)
 
@@ -31,6 +38,7 @@ def test_error_quat_1():
     error_angle_axis = quat_to_angle_axis(error_quaternion)
     final_vector = rotate_vector_by_quaternion(current_vector, error_quaternion)
     assert np.allclose(desired_vector, final_vector)
+
 
 # def test_error_quat_2():
 #     current_angle_axis = np.array([0, 0, 0, 1])
@@ -53,13 +61,14 @@ def test_error_quat_1():
 #     final_vector = rotate_vector_by_quaternion(current_vector, quaternion_inverse(error_quaternion))
 #     assert np.allclose(desired_vector, final_vector)
 
+
 def test_error_quat_3():
 
-    current_angle_axis = np.array([-np.pi/2, 1, 0, 0])
+    current_angle_axis = np.array([-np.pi / 2, 1, 0, 0])
     current_quat = angle_axis_to_quat(current_angle_axis)
     current_basis = get_rotated_basis_from_quat(current_quat)
 
-    desired_angle_axis = np.array([-np.pi/2, 0, 0, 1])
+    desired_angle_axis = np.array([-np.pi / 2, 0, 0, 1])
     desired_quat = angle_axis_to_quat(desired_angle_axis)
     desired_basis = get_rotated_basis_from_quat(desired_quat)
 

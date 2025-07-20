@@ -4,21 +4,37 @@ from utils import compute_acceleration
 
 
 def plot_3D_trajectory(t_vals, state_vals):
+    """
+
+    Args:
+        t_vals ():
+        state_vals ():
+
+    Returns:
+
+    """
     fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
+    ax = fig.add_subplot(111, projection="3d")
 
     x_vals = state_vals[:, 0]
     y_vals = state_vals[:, 1]
     z_vals = state_vals[:, 2]
 
-    ax.plot3D(x_vals, y_vals, z_vals, label='Rocket trajectory', linewidth=2, color='dodgerblue')
-    ax.scatter([x_vals[0]], [y_vals[0]], [z_vals[0]], color='green', label='Launch', s=50)
-    ax.scatter([x_vals[-1]], [y_vals[-1]], [z_vals[-1]], color='red', label='Final point', s=50)
+    ax.plot3D(
+        x_vals,
+        y_vals,
+        z_vals,
+        label="Rocket trajectory",
+        linewidth=2,
+        color="dodgerblue",
+    )
+    ax.scatter([x_vals[0]], [y_vals[0]], [z_vals[0]], color="green", label="Launch", s=50)
+    ax.scatter([x_vals[-1]], [y_vals[-1]], [z_vals[-1]], color="red", label="Final point", s=50)
 
-    ax.set_xlabel('X (m)')
-    ax.set_ylabel('Y (m)')
-    ax.set_zlabel('Z (m)')
-    ax.set_title('3D Rocket Trajectory')
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_zlabel("Z (m)")
+    ax.set_title("3D Rocket Trajectory")
     ax.legend()
     ax.grid(True)
     plt.tight_layout()
@@ -30,8 +46,8 @@ def plot_1D_position_velocity_acceleration(t_vals, state_vals, axis, environment
     # Plot altitude vs time
     fig, axs = plt.subplots(3)
 
-    position_dict = {"X":0, "Y":1, "Z":2}
-    velocity_dict = {"X":3, "Y":4, "Z":5}
+    position_dict = {"X": 0, "Y": 1, "Z": 2}
+    velocity_dict = {"X": 3, "Y": 4, "Z": 5}
 
     altitude = state_vals[:, position_dict[axis]] - environment.earth_radius
     axs[0].plot(t_vals, altitude)
