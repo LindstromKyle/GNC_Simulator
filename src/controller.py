@@ -1,3 +1,5 @@
+from bdb import effective
+
 import numpy as np
 from abc import ABC, abstractmethod
 
@@ -76,17 +78,23 @@ class PIDAttitudeController(Controller):
 
         control_torque = p_term + i_term + d_term  # Desired torque
 
+        throttle = self.compute_throttle(time, state_vector)
+
         # Map torque to actuators
-        # Example: gimbal = some_mapping(control_torque)  # Implement based on vehicle
-        thrust = self.vehicle.thrust_magnitude if time < self.vehicle.burn_time else 0.0
-        if thrust > 0:
-            engine_gimbal_pitch = np.arcsin(
-                control_torque[0] / (thrust * self.vehicle.engine_gimbal_arm)
-            )  # For X torque
-            engine_gimbal_yaw = np.arcsin(
-                control_torque[1] / (thrust * self.vehicle.engine_gimbal_arm)
-            )  # For Y torque
-            # Ignore roll torque[2] for now (or set to 0)
+        thrust_magnitude = self.vehicle.get_thrust_magnitude(time)
+        effective_thrust_magnitude = thrust_magnitude * throttle
+
+        if effective_thrust_magnitude > 0:
+            # Compute sin_arg for each axis
+            sin_pitch = control_torque[0] / (effective_thrust_magnitude * self.vehicle.engine_gimbal_arm_len)
+            sin_yaw = control_torque[1] / (effective_thrust_magnitude * self.vehicle.engine_gimbal_arm_len)
+            # Clip to valid arcsin domain (handles |sin_arg| > 1)
+            sin_pitch = np.clip(sin_pitch, -1.0, 1.0)
+            sin_yaw = np.clip(sin_yaw, -1.0, 1.0)
+            # Compute angles
+            engine_gimbal_pitch = np.arcsin(sin_pitch)
+            engine_gimbal_yaw = np.arcsin(sin_yaw)
+            # Ignore roll for now
             engine_gimbal_angles = np.array([engine_gimbal_pitch, engine_gimbal_yaw])
         else:
             engine_gimbal_angles = np.zeros(2)
@@ -94,4 +102,16 @@ class PIDAttitudeController(Controller):
         return {
             "desired_torque": control_torque,
             "engine_gimbal_angles": engine_gimbal_angles,
+            "throttle": throttle,
         }  # Expand later
+
+    def compute_throttle(self, time: float, state_vector: np.ndarray) -> float:
+        """
+        Placeholder: Compute throttle based on time/phase/state.
+        For ascent: Always 1.0.
+        Subclasses can override for landing (e.g., PID on vertical velocity/altitude).
+        """
+        if self.vehicle.get_burn_status(time):
+            return 1.0
+        else:
+            return 0.0  # Default for ascent

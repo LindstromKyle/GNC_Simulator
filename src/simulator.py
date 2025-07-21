@@ -2,9 +2,8 @@ import numpy as np
 import logging
 
 from controller import PIDAttitudeController
-from guidance import GravityTurnGuidance
-from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration
-from utils import quat_to_angle_axis
+from guidance import GravityTurnGuidance, OrbitalInsertionGuidance
+from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration, plot_3D_trajectory_segments
 from vehicle import Vehicle
 from environment import Environment
 from state import State
@@ -42,7 +41,6 @@ class Simulator:
         self.controller = controller
 
     def run(self):
-        print(f"Integrating...")
         t_vals, state_vals = integrate_rk4(
             vehicle=self.vehicle,
             environment=self.environment,
@@ -66,25 +64,51 @@ class Simulator:
 
 
 if __name__ == "__main__":
-    print(f"Initializing Vehicle...")
-    vehicle = Vehicle(
-        dry_mass=25600,
-        prop_mass=395700,
-        thrust_magnitude=7200000,
-        burn_time=162,
-        moment_of_inertia=np.diag([470297, 470297, 705445]),
-        base_drag_coefficient=0.3,
-        drag_scaling_coefficient=2.0,
-        cross_sectional_area=10.5,
-        engine_gimbal_limit=10.0,
-        engine_gimbal_arm=18.0,
+
+    # Stage 1 params
+    stage1_dry_mass = 25600
+    stage1_ascent_prop = 395700
+    stage1_reserve_prop = 30000  # Approx for returns burns
+    stage1_thrust = 7200000
+    stage1_burn_time = 162
+    stage1_moi = np.diag([470297, 470297, 705445])
+    stage1_cd_base = 0.3
+    stage1_cd_scale = 0.2
+    stage1_area = 10.5
+    stage1_gimbal_limit = 10.0
+    stage1_gimbal_arm = 3.0  # Your code has 18, but typical ~3-5m; adjust
+
+    # Stage 2 params
+    stage2_dry_mass = 4000
+    stage2_prop = 111500
+    stage2_thrust = 934000
+    stage2_burn_time = 397
+    stage2_moi = np.diag([10000, 10000, 20000])  # Approximate scaled
+    stage2_cd_base = 0.3
+    stage2_cd_scale = 2.0
+    stage2_area = 7.0  # Smaller
+    stage2_gimbal_limit = 5.0  # Vacuum engine
+    stage2_gimbal_arm = 2.0
+    separation_time = stage1_burn_time  # For now; later based on velocity/alt
+
+    # Combined vehicle for ascent
+    combined_dry_mass = stage1_dry_mass + stage1_reserve_prop + stage2_dry_mass + stage2_prop
+    ascent_combined_stage = Vehicle(
+        dry_mass=combined_dry_mass,
+        prop_mass=stage1_ascent_prop,
+        base_thrust_magnitude=stage1_thrust,
+        burn_duration=stage1_burn_time,
+        burn_start_time=0.0,
+        moment_of_inertia=stage1_moi + stage2_moi,  # Approx sum; improve later
+        base_drag_coefficient=stage1_cd_base,
+        drag_scaling_coefficient=stage1_cd_scale,
+        cross_sectional_area=stage1_area,  # Use stage1 area for stack
+        engine_gimbal_limit_deg=stage1_gimbal_limit,
+        engine_gimbal_arm_len=stage1_gimbal_arm,
     )
 
-    print(f"Initializing Environment...")
     environment = Environment()
 
-    print(f"Initializing State...")
-    # Make sure to initialize with ECI coordinates
     initial_state = State(
         position=[0, 0, environment.earth_radius],
         velocity=[0, 0, 0],
@@ -92,51 +116,81 @@ if __name__ == "__main__":
         angular_velocity=[0, 0, 0],
     )
 
-    sim = Simulator(
-        vehicle=vehicle,
+    ascent_sim = Simulator(
+        vehicle=ascent_combined_stage,
         environment=environment,
         initial_state=initial_state,
         t_0=0,
-        t_final=300,
-        delta_t=0.5,
+        t_final=separation_time,
+        delta_t=0.1,
         log_interval=1,
     )
 
-    guidance = GravityTurnGuidance(
-        kick_start_time=15.0, kick_angle_deg=10.0, prograde_start_time=30.0, kick_direction=np.array([1.0, 0.0, 0.0])
+    ascent_guidance = GravityTurnGuidance(
+        kick_start_time=25.0, kick_angle_deg=5.0, prograde_start_time=45.0, kick_direction=np.array([1.0, 0.0, 0.0])
     )
 
-    controller = PIDAttitudeController(
+    ascent_controller = PIDAttitudeController(
         kp=np.array([8e4, 8e4, 3e5]),
         ki=np.array([1e-2, 1e-2, 1e-2]),
         kd=np.array([2e6, 2e6, 1e6]),
-        guidance=guidance,
-        vehicle=sim.vehicle,
+        guidance=ascent_guidance,
+        vehicle=ascent_sim.vehicle,
     )
 
-    sim.add_controller(controller)
+    ascent_sim.add_controller(ascent_controller)
 
-    t_vals, state_vals = sim.run()
+    print(f"Simulating Ascent...")
+    ascent_t_vals, ascent_state_vals = ascent_sim.run()
 
-    sim.plot_1D(t_vals, state_vals, "Z")
+    # Separation
+    burnout_state_vector = ascent_state_vals[-1]
+    current_state = State(
+        position=burnout_state_vector[:3],
+        velocity=burnout_state_vector[3:6],
+        quaternion=burnout_state_vector[6:10],
+        angular_velocity=burnout_state_vector[10:13],
+    )
 
-    sim.plot_3D(t_vals, state_vals)
+    # Stage 2 sim
+    stage_2 = Vehicle(
+        dry_mass=stage2_dry_mass,
+        prop_mass=stage2_prop,
+        base_thrust_magnitude=stage2_thrust,
+        burn_duration=stage2_burn_time,
+        moment_of_inertia=stage2_moi,
+        base_drag_coefficient=stage2_cd_base,
+        drag_scaling_coefficient=stage2_cd_scale,
+        cross_sectional_area=stage2_area,
+        engine_gimbal_limit_deg=stage2_gimbal_limit,
+        engine_gimbal_arm_len=stage2_gimbal_arm,
+        burn_start_time=separation_time,  # Ignite immediately
+    )
 
-    # Plot pitch angle
-    import matplotlib.pyplot as plt
+    guidance_stage2 = OrbitalInsertionGuidance(target_apoapsis=200000.0)
 
-    fig, ax = plt.subplots()
+    controller_stage2 = PIDAttitudeController(
+        kp=np.array([5e4, 5e4, 2e5]),  # Tune for lighter stage
+        ki=np.array([1e-3, 1e-3, 1e-3]),
+        kd=np.array([1e6, 1e6, 5e5]),
+        guidance=guidance_stage2,
+        vehicle=stage_2,
+    )
 
-    quats = state_vals[:, 6:10]
-    pitches = []
-    for quat in quats:
-        angle_axis = quat_to_angle_axis(quat)
-        angle = np.degrees(angle_axis[0])
-        pitches.append(angle)
-    ax.plot(t_vals, pitches)
-    ax.axhline(guidance.kick_angle_deg, color="r")
-    ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Pitch (Degrees)")
-    ax.set_title("Pitch vs Time")
-    ax.grid()
-    plt.show()
+    sim_stage2 = Simulator(
+        vehicle=stage_2,
+        environment=environment,
+        initial_state=current_state,
+        t_0=separation_time,
+        t_final=separation_time + 600,  # Enough for orbit
+        delta_t=0.2,  # Larger step ok for vacuum
+        log_interval=5,
+    )
+    sim_stage2.add_controller(controller_stage2)
+
+    print("\nSimulating Stage 2 to Orbit...")
+    stage2_t_vals, stage2_state_vals = sim_stage2.run()
+
+    plot_3D_trajectory_segments(
+        [(ascent_t_vals, ascent_state_vals), (stage2_t_vals, stage2_state_vals)], show_earth=False
+    )

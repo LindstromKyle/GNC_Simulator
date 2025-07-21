@@ -17,11 +17,13 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controller=N
     if controller:
         controls = controller.update(time, state)
         gimbal_angles = controls.get("engine_gimbal_angles", np.zeros(2))
+        throttle = controls.get("throttle", 1.0)
     else:
         gimbal_angles = np.zeros(2)
+        throttle = 1.0
 
     # Forces
-    thrust_force, thrust_vector_torque = vehicle.thrust_vector(time, quaternion, gimbal_angles)
+    thrust_force, thrust_vector_torque = vehicle.thrust_vector(time, quaternion, gimbal_angles, throttle)
     gravitational_force = environment.gravitational_force(position, vehicle_mass)
     drag_force = environment.drag_force(position, velocity, vehicle, quaternion)
     net_force = thrust_force + gravitational_force + drag_force

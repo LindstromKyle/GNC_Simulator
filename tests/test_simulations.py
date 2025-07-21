@@ -13,13 +13,13 @@ def test_pid_attitude_hold():
         dry_mass=25600,
         prop_mass=395700,
         thrust_magnitude=7200000,
-        burn_time=162,
+        burn_duration=162,
         moment_of_inertia=np.diag([470297, 470297, 705445]),
         base_drag_coefficient=0.3,
         drag_scaling_coefficient=2.0,
         cross_sectional_area=10.5,
-        engine_gimbal_limit=10.0,
-        engine_gimbal_arm=18.0,
+        engine_gimbal_limit_deg=10.0,
+        engine_gimbal_arm_len=18.0,
     )
     environment = Environment()
     initial_state = State(

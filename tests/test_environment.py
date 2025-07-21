@@ -32,13 +32,13 @@ def test_drag_force_zero_velocity():
         dry_mass=25600,
         prop_mass=395700,
         thrust_magnitude=7200000,
-        burn_time=162,
+        burn_duration=162,
         moment_of_inertia=np.diag([470297, 470297, 705445]),
         base_drag_coefficient=0.3,
         drag_scaling_coefficient=2.0,
         cross_sectional_area=10.5,
-        engine_gimbal_limit=10.0,
-        engine_gimbal_arm=18.0,
+        engine_gimbal_limit_deg=10.0,
+        engine_gimbal_arm_len=18.0,
     )
     position = np.array([0, 0, R_earth + 1000])
     velocity = np.zeros(3)
@@ -53,13 +53,13 @@ def test_drag_force_magnitude():
         dry_mass=25600,
         prop_mass=395700,
         thrust_magnitude=7200000,
-        burn_time=162,
+        burn_duration=162,
         moment_of_inertia=np.diag([470297, 470297, 705445]),
         base_drag_coefficient=0.5,
         drag_scaling_coefficient=2.0,
         cross_sectional_area=0.1,
-        engine_gimbal_limit=10.0,
-        engine_gimbal_arm=18.0,
+        engine_gimbal_limit_deg=10.0,
+        engine_gimbal_arm_len=18.0,
     )
     velocity = np.array([0, 0, -100])  # 100 m/s downward
     position = np.array([0, 0, R_earth + 1000])

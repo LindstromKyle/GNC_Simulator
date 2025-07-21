@@ -1,5 +1,6 @@
 from dynamics import calculate_dynamics
 import numpy as np
+from tqdm import tqdm
 
 
 def integrate_rk4(
@@ -19,6 +20,10 @@ def integrate_rk4(
     current_time = t_0
     current_state = initial_state.copy()
     last_logged_time = None
+
+    # Progress bar
+    max_iterations = np.floor((t_final - t_0) / delta_t)
+    p_bar = tqdm(total=max_iterations, desc="Processing", leave=True)
 
     while current_time < t_final:
 
@@ -77,4 +82,8 @@ def integrate_rk4(
         t_values.append(current_time)
         state_values.append(current_state.copy())
 
+        # Progress bar
+        p_bar.update(1)
+
+    p_bar.close()
     return np.array(t_values), np.array(state_values)
