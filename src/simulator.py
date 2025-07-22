@@ -2,7 +2,8 @@ import numpy as np
 import logging
 
 from controller import PIDAttitudeController
-from guidance import GravityTurnGuidance, OrbitalInsertionGuidance
+from guidance import ModeBasedGuidance
+from mission import MissionPlanner, TimeBasedPhase, KickPhase, AscentBurnPhase, CoastPhase, CircBurnPhase
 from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration, plot_3D_trajectory_segments
 from vehicle import Vehicle
 from environment import Environment
@@ -41,7 +42,7 @@ class Simulator:
         self.controller = controller
 
     def run(self):
-        t_vals, state_vals = integrate_rk4(
+        t_vals, state_vals, phase_transitions = integrate_rk4(
             vehicle=self.vehicle,
             environment=self.environment,
             initial_state=self.initial_state.as_vector(),
@@ -50,9 +51,14 @@ class Simulator:
             delta_t=self.delta_t,
             log_interval=self.log_interval,
             controller=self.controller,
+            mission_planner=(
+                self.controller.mission_planner
+                if self.controller and hasattr(self.controller, "mission_planner")
+                else None
+            ),
         )
 
-        return t_vals, state_vals
+        return t_vals, state_vals, phase_transitions
 
     def plot_1D(self, t_vals, state_vals, axis):
         # Plot 1D params
@@ -93,6 +99,8 @@ if __name__ == "__main__":
 
     # Combined vehicle for ascent
     combined_dry_mass = stage1_dry_mass + stage1_reserve_prop + stage2_dry_mass + stage2_prop
+
+    # Vehicle
     ascent_combined_stage = Vehicle(
         dry_mass=combined_dry_mass,
         prop_mass=stage1_ascent_prop,
@@ -107,8 +115,10 @@ if __name__ == "__main__":
         engine_gimbal_arm_len=stage1_gimbal_arm,
     )
 
+    # Environment
     environment = Environment()
 
+    # State
     initial_state = State(
         position=[0, 0, environment.earth_radius],
         velocity=[0, 0, 0],
@@ -116,6 +126,7 @@ if __name__ == "__main__":
         angular_velocity=[0, 0, 0],
     )
 
+    # Simulator
     ascent_sim = Simulator(
         vehicle=ascent_combined_stage,
         environment=environment,
@@ -126,22 +137,46 @@ if __name__ == "__main__":
         log_interval=1,
     )
 
-    ascent_guidance = GravityTurnGuidance(
-        kick_start_time=25.0, kick_angle_deg=5.0, prograde_start_time=45.0, kick_direction=np.array([1.0, 0.0, 0.0])
-    )
+    # Set up phase timing
+    kick_start_time = 25.0
+    prograde_start_time = 45.0
 
+    # Phases
+    ascent_phases = [
+        TimeBasedPhase(end_time=kick_start_time, attitude_mode="radial", throttle=1.0, name="Initial Ascent"),
+        KickPhase(
+            end_time=prograde_start_time,
+            kick_direction=np.array([1.0, 0.0, 0.0]),
+            kick_angle_deg=5.5,
+            throttle=1.0,
+            name="Kick",
+        ),
+        TimeBasedPhase(end_time=separation_time, attitude_mode="prograde", throttle=1.0, name="Prograde Stage 1"),
+    ]
+
+    # Mission Planner
+    ascent_planner = MissionPlanner(phases=ascent_phases, environment=environment, start_time=0.0)
+
+    # Guidance
+    ascent_guidance = ModeBasedGuidance()
+
+    # Controller
     ascent_controller = PIDAttitudeController(
         kp=np.array([8e4, 8e4, 3e5]),
         ki=np.array([1e-2, 1e-2, 1e-2]),
         kd=np.array([2e6, 2e6, 1e6]),
         guidance=ascent_guidance,
         vehicle=ascent_sim.vehicle,
+        mission_planner=ascent_planner,
     )
-
     ascent_sim.add_controller(ascent_controller)
 
     print(f"Simulating Ascent...")
-    ascent_t_vals, ascent_state_vals = ascent_sim.run()
+    ascent_t_vals, ascent_state_vals, ascent_phase_transitions = ascent_sim.run()
+
+    """
+    STAGE 2
+    """
 
     # Separation
     burnout_state_vector = ascent_state_vals[-1]
@@ -152,29 +187,39 @@ if __name__ == "__main__":
         angular_velocity=burnout_state_vector[10:13],
     )
 
-    # Stage 2 sim
+    # Stage 2 Vehicle
     stage_2 = Vehicle(
         dry_mass=stage2_dry_mass,
         prop_mass=stage2_prop,
         base_thrust_magnitude=stage2_thrust,
         burn_duration=stage2_burn_time,
+        burn_start_time=separation_time,  # Ignite immediately
         moment_of_inertia=stage2_moi,
         base_drag_coefficient=stage2_cd_base,
         drag_scaling_coefficient=stage2_cd_scale,
         cross_sectional_area=stage2_area,
         engine_gimbal_limit_deg=stage2_gimbal_limit,
         engine_gimbal_arm_len=stage2_gimbal_arm,
-        burn_start_time=separation_time,  # Ignite immediately
     )
 
-    guidance_stage2 = OrbitalInsertionGuidance(target_apoapsis=200000.0)
+    target_alt = 200000.0
+    target_ra = target_alt + environment.earth_radius
+    stage2_phases = [
+        AscentBurnPhase(target_ra=target_ra, attitude_mode="prograde", throttle=1.0, name="Prograde Stage 2"),
+        CoastPhase(time_to_apo_threshold=30.0, attitude_mode="prograde", throttle=0.0, name="Coast"),
+        CircBurnPhase(peri_tolerance_factor=0.99, attitude_mode="prograde", throttle=1.0, name="Circularization"),
+    ]
+    stage2_planner = MissionPlanner(phases=stage2_phases, environment=environment, start_time=separation_time)
+
+    stage2_guidance = ModeBasedGuidance()
 
     controller_stage2 = PIDAttitudeController(
         kp=np.array([5e4, 5e4, 2e5]),  # Tune for lighter stage
         ki=np.array([1e-3, 1e-3, 1e-3]),
         kd=np.array([1e6, 1e6, 5e5]),
-        guidance=guidance_stage2,
+        guidance=stage2_guidance,
         vehicle=stage_2,
+        mission_planner=stage2_planner,
     )
 
     sim_stage2 = Simulator(
@@ -182,15 +227,22 @@ if __name__ == "__main__":
         environment=environment,
         initial_state=current_state,
         t_0=separation_time,
-        t_final=separation_time + 600,  # Enough for orbit
+        t_final=separation_time + 1200,  # Enough for orbit
         delta_t=0.2,  # Larger step ok for vacuum
         log_interval=5,
     )
     sim_stage2.add_controller(controller_stage2)
 
     print("\nSimulating Stage 2 to Orbit...")
-    stage2_t_vals, stage2_state_vals = sim_stage2.run()
+    stage2_t_vals, stage2_state_vals, stage2_phase_transitions = sim_stage2.run()
+
+    # Combine phase transitions for plotting
+    all_phase_transitions = [(t, f"{name}") for t, name in ascent_phase_transitions] + [
+        (t, f"{name}") for t, name in stage2_phase_transitions
+    ]
 
     plot_3D_trajectory_segments(
-        [(ascent_t_vals, ascent_state_vals), (stage2_t_vals, stage2_state_vals)], show_earth=False
+        [(ascent_t_vals, ascent_state_vals), (stage2_t_vals, stage2_state_vals)],
+        phase_transitions=all_phase_transitions,
+        show_earth=False,
     )

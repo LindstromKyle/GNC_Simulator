@@ -4,14 +4,7 @@ from tqdm import tqdm
 
 
 def integrate_rk4(
-    vehicle,
-    environment,
-    initial_state,
-    t_0,
-    t_final,
-    delta_t,
-    log_interval,
-    controller=None,
+    vehicle, environment, initial_state, t_0, t_final, delta_t, log_interval, controller=None, mission_planner=None
 ):
 
     # Initialize starting time and position
@@ -20,6 +13,9 @@ def integrate_rk4(
     current_time = t_0
     current_state = initial_state.copy()
     last_logged_time = None
+    phase_transitions = []  # Collect transitions if planner provided
+    if mission_planner:
+        phase_transitions = mission_planner.get_phase_transitions()  # Initial phase
 
     # Progress bar
     max_iterations = np.floor((t_final - t_0) / delta_t)
@@ -82,8 +78,12 @@ def integrate_rk4(
         t_values.append(current_time)
         state_values.append(current_state.copy())
 
+        # Update phase transitions
+        if mission_planner:
+            phase_transitions = mission_planner.get_phase_transitions()
+
         # Progress bar
         p_bar.update(1)
 
     p_bar.close()
-    return np.array(t_values), np.array(state_values)
+    return np.array(t_values), np.array(state_values), phase_transitions

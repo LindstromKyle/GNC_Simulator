@@ -88,36 +88,68 @@ def plot_1D_position_velocity_acceleration(t_vals, state_vals, axis, environment
     plt.show()
 
 
-def plot_3D_trajectory_segments(segments: list[tuple[np.ndarray, np.ndarray]], show_earth: bool = False):
-    fig = plt.figure()
+def plot_3D_trajectory_segments(segments, phase_transitions=None, show_earth=False):
+    fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    if show_earth:
-        # Add Earth's surface as a spherical mesh
-        earth_radius_km = 6371  # Earth radius in km (consistent with trajectory scaling)
-        u = np.linspace(0, 2 * np.pi, 50)  # Azimuthal angle; fewer points for performance
-        v = np.linspace(0, np.pi, 25)  # Polar angle
-        u, v = np.meshgrid(u, v)
-        x = earth_radius_km * np.sin(v) * np.cos(u)
-        y = earth_radius_km * np.sin(v) * np.sin(u)
-        z = earth_radius_km * np.cos(v)
-        ax.plot_surface(x, y, z, color="lightblue", alpha=0.4, zorder=0)  # Semi-transparent blue sphere
+    # Define colors for phases (extend as needed)
+    phase_colors = {
+        "Ascent: radial": "blue",
+        "Ascent: kick": "green",
+        "Ascent: prograde": "cyan",
+        "Stage 2: ascent_burn": "orange",
+        "Stage 2: coast": "purple",
+        "Stage 2: circ_burn": "red",
+    }
 
-    colors = ["blue", "green", "orange"]  # Ascent, stage2, stage1
-    labels = ["Ascent", "Stage 2 Orbital Insertion", "Stage 1 Return"]
+    for t_vals, state_vals in segments:
+        x_vals = state_vals[:, 0] / 1000
+        y_vals = state_vals[:, 1] / 1000
+        z_vals = state_vals[:, 2] / 1000
 
-    for i, (t_vals, state_vals) in enumerate(segments):
-        x = state_vals[:, 0] / 1000
-        y = state_vals[:, 1] / 1000
-        z = state_vals[:, 2] / 1000
-        ax.plot3D(x, y, z, color=colors[i], label=labels[i])
+        if phase_transitions:
+            # Segment by phase transitions
+            for i, (start_time, phase_name) in enumerate(phase_transitions):
+                end_time = phase_transitions[i + 1][0] if i + 1 < len(phase_transitions) else t_vals[-1]
+                mask = (t_vals >= start_time) & (t_vals <= end_time)
+                if np.any(mask):
+                    ax.plot3D(
+                        x_vals[mask],
+                        y_vals[mask],
+                        z_vals[mask],
+                        label=phase_name,
+                        linewidth=2,
+                        color=phase_colors.get(phase_name, "gray"),
+                    )
+        else:
+            # Fallback: Plot whole segment
+            ax.plot3D(
+                x_vals,
+                y_vals,
+                z_vals,
+                label="Trajectory",
+                linewidth=2,
+                color="dodgerblue",
+            )
 
-    # Add markers for separation, etc.
-    ax.legend()
-    ax.set_title("3D Trajectory - Staged Mission")
+        ax.scatter(
+            [x_vals[0]], [y_vals[0]], [z_vals[0]], color="green", label="Launch" if t_vals[0] == 0 else None, s=50
+        )
+        ax.scatter(
+            [x_vals[-1]],
+            [y_vals[-1]],
+            [z_vals[-1]],
+            color="red",
+            label="Final point" if t_vals[-1] >= t_vals[-1] else None,
+            s=50,
+        )
+
     ax.set_xlabel("X (km)")
     ax.set_ylabel("Y (km)")
     ax.set_zlabel("Z (km)")
+    ax.set_title("3D Rocket Trajectory by Phase")
+    ax.legend()
+    ax.grid(True)
     plt.tight_layout()
     plt.show()
 

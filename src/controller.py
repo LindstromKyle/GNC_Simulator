@@ -4,6 +4,7 @@ import numpy as np
 from abc import ABC, abstractmethod
 
 from guidance import Guidance
+from mission import MissionPlanner
 from state import State  # Import for type hinting
 from utils import quaternion_multiply, quaternion_inverse, quat_to_angle_axis
 from vehicle import Vehicle
@@ -37,6 +38,7 @@ class PIDAttitudeController(Controller):
         kd: np.ndarray,
         guidance: Guidance,
         vehicle: Vehicle,
+        mission_planner: MissionPlanner = None,
     ):
         """
 
@@ -54,12 +56,26 @@ class PIDAttitudeController(Controller):
         self.integral_error = np.zeros(3)  # Accumulator for I term
         self.previous_error = np.zeros(3)
         self.vehicle = vehicle
+        self.mission_planner = mission_planner
 
     def update(self, time: float, state_vector: np.ndarray) -> dict:
         current_quaternion = state_vector[6:10]
 
+        # Get setpoints from planner if available, else default to prograde
+        if self.mission_planner:
+            mission_phase_parameters = self.mission_planner.update(time, state_vector)
+            # throttle = setpoints.get("throttle", 1.0)
+            # mode = setpoints.get("attitude_mode", "prograde")
+        else:
+            # throttle = 1.0 if self.vehicle.get_burn_status(time) else 0.0
+            # mode = "prograde"  # Default fallback
+            mission_phase_parameters = {}
+
+        # Throttle
+        throttle = mission_phase_parameters.get("throttle", 1.0)
+
         # Get desired quaternion from guidance
-        desired_quat = self.guidance.get_desired_quaternion(time, state_vector)
+        desired_quat = self.guidance.get_desired_quaternion(time, state_vector, mission_phase_parameters)
         desired_quat /= np.linalg.norm(desired_quat)
 
         # Compute quaterion error (expressed in Body basis vectors) [q_cur^-1(B -> I) then q_des (I -> D)]
@@ -77,8 +93,6 @@ class PIDAttitudeController(Controller):
         self.previous_error = current_error
 
         control_torque = p_term + i_term + d_term  # Desired torque
-
-        throttle = self.compute_throttle(time, state_vector)
 
         # Map torque to actuators
         thrust_magnitude = self.vehicle.get_thrust_magnitude(time)
@@ -104,14 +118,3 @@ class PIDAttitudeController(Controller):
             "engine_gimbal_angles": engine_gimbal_angles,
             "throttle": throttle,
         }  # Expand later
-
-    def compute_throttle(self, time: float, state_vector: np.ndarray) -> float:
-        """
-        Placeholder: Compute throttle based on time/phase/state.
-        For ascent: Always 1.0.
-        Subclasses can override for landing (e.g., PID on vertical velocity/altitude).
-        """
-        if self.vehicle.get_burn_status(time):
-            return 1.0
-        else:
-            return 0.0  # Default for ascent

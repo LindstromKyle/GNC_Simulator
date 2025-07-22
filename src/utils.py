@@ -102,3 +102,84 @@ def angle_axis_to_quat(angle_axis: np.ndarray) -> np.ndarray:
     unit_axis = angle_axis[1:] / axis_norm
     quaternion = np.append(np.array([np.cos(angle / 2)]), np.sin(angle / 2) * unit_axis)
     return quaternion / np.linalg.norm(quaternion)
+
+
+def compute_minimal_quaternion_rotation(desired_z_vector):
+    # Compute minimal quaternion to rotate body Z [0,0,1] to desired_z
+    body_z_vector = np.array([0, 0, 1])
+    dot = np.dot(body_z_vector, desired_z_vector)
+    dot = np.clip(dot, -1.0, 1.0)
+
+    if dot > 0.99999:
+        return np.array([1.0, 0.0, 0.0, 0.0])
+    if dot < -0.99999:
+        # 180° flip (arbitrary axis)
+        return np.array([0.0, 1.0, 0.0, 0.0])
+
+    cross_product = np.cross(body_z_vector, desired_z_vector)
+    cross_norm = np.linalg.norm(cross_product)
+    if cross_norm < 1e-6:
+        axis = np.array([0.0, 0.0, 0.0])
+    else:
+        axis = cross_product / cross_norm
+    angle = np.arccos(dot)
+    sin_half = np.sin(angle / 2.0)
+    cos_half = np.cos(angle / 2.0)
+    quat = np.array([cos_half, sin_half * axis[0], sin_half * axis[1], sin_half * axis[2]])
+    return quat / np.linalg.norm(quat)
+
+
+def compute_orbital_elements(position: np.ndarray, velocity: np.ndarray, mu: float) -> dict | None:
+    """
+    Compute Keplerian elements from position and velocity (inertial frame).
+    Returns dict with 'a', 'e', 'ra', 'rp', 'e_vec' or None if hyperbolic.
+    """
+    r = np.linalg.norm(position)
+    v2 = np.dot(velocity, velocity)
+    energy = v2 / 2 - mu / r
+    if energy >= 0:
+        return None  # Hyperbolic or parabolic - no bounded apo/peri
+    a = -mu / (2 * energy)
+    h = np.cross(position, velocity)
+    e_vec = (1 / mu) * np.cross(velocity, h) - position / r
+    e = np.linalg.norm(e_vec)
+    ra = a * (1 + e)
+    rp = a * (1 - e)
+    return {"a": a, "e": e, "ra": ra, "rp": rp, "e_vec": e_vec}
+
+
+def compute_time_to_apoapsis(position: np.ndarray, velocity: np.ndarray, elements: dict, mu: float) -> float:
+    """
+    Compute time (s) to next apoapsis from current state.
+    Assumes elliptic orbit (elements not None).
+    """
+    r = np.linalg.norm(position)
+    e_vec = elements["e_vec"]
+    e = elements["e"]
+    a = elements["a"]
+    # True anomaly nu
+    cos_nu = np.dot(e_vec, position) / (e * r)
+    cos_nu = np.clip(cos_nu, -1.0, 1.0)
+    nu0 = np.arccos(cos_nu)
+    vr = np.dot(velocity, position) / r  # Radial velocity
+    if vr < 0:
+        nu = 2 * np.pi - nu0
+    else:
+        nu = nu0
+    # Eccentric anomaly E
+    sqrt_term = np.sqrt((1 - e) / (1 + e))
+    tan_half_nu = np.tan(nu / 2)
+    E = 2 * np.arctan(sqrt_term * tan_half_nu)
+    if E < 0:
+        E += 2 * np.pi
+    # Mean anomaly M
+    M = E - e * np.sin(E)
+    # Delta M to next apoapsis (M = pi at apo)
+    if M < np.pi:
+        delta_M = np.pi - M
+    else:
+        delta_M = np.pi - M + 2 * np.pi
+    # Mean motion n
+    n = np.sqrt(mu / a**3)
+    time_to_apo = delta_M / n
+    return time_to_apo
