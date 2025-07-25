@@ -10,10 +10,9 @@ class Vehicle:
     def __init__(
         self,
         dry_mass: float,
-        prop_mass: float,
+        initial_prop_mass: float,
         base_thrust_magnitude: float,
-        burn_duration: float,
-        burn_start_time: float,
+        average_isp: float,
         moment_of_inertia: np.ndarray,
         base_drag_coefficient: float,
         drag_scaling_coefficient: float,
@@ -23,11 +22,11 @@ class Vehicle:
     ):
 
         self.dry_mass = dry_mass
-        self.prop_mass = prop_mass
+        self.initial_propellant_mass = initial_prop_mass
         self.base_thrust_magnitude = base_thrust_magnitude
-        self.burn_duration = burn_duration
-        self.burn_start_time = burn_start_time
-        self.burn_end_time = self.burn_start_time + self.burn_duration
+        self.average_isp = average_isp
+        self.g0 = 9.80665
+        self.mdot_max = base_thrust_magnitude / (average_isp * self.g0) if average_isp > 0 else 0.0
         self.moment_of_inertia = moment_of_inertia
         self.base_drag_coefficient = base_drag_coefficient
         self.drag_scaling_coefficient = drag_scaling_coefficient
@@ -35,7 +34,6 @@ class Vehicle:
         self.engine_gimbal_limit_deg = engine_gimbal_limit_deg
         self.engine_gimbal_limit_rad = np.deg2rad(self.engine_gimbal_limit_deg)
         self.engine_gimbal_arm_len = engine_gimbal_arm_len
-        self.mass_flow_rate = prop_mass / burn_duration if burn_duration > 0 else 0.0
 
         self.grid_fin_deflections = {
             "Fin 1": 0.0,
@@ -61,10 +59,12 @@ class Vehicle:
 
         """
         if time < self.burn_start_time:
-            return self.dry_mass + self.prop_mass
+            return self.dry_mass + self.initial_propellant_mass
         elif self.burn_start_time <= time < self.burn_end_time:
-            current_propellant_mass = self.prop_mass - self.mass_flow_rate * (time - self.burn_start_time)
-            return self.dry_mass + current_propellant_mass
+            self.current_propellant_mass = self.initial_propellant_mass - self.mass_flow_rate * (
+                time - self.burn_start_time
+            )
+            return self.dry_mass + self.current_propellant_mass
         else:
             return self.dry_mass
 
@@ -80,8 +80,8 @@ class Vehicle:
         Returns:
 
         """
-        # If not currently burning, thrust is zero
-        if not self.get_burn_status(time):
+        # If throttle is zero or invalid, thrust is zero
+        if throttle <= 0:
             return np.zeros(3), np.zeros(3)
 
         # Clamp gimbal angles to limits
@@ -124,14 +124,6 @@ class Vehicle:
 
         return thrust_vector_force, thrust_vector_torque
 
-    def get_burn_status(self, time):
-        if self.burn_start_time <= time < self.burn_end_time:
-            return True
-        else:
-            return False
-
-    def get_thrust_magnitude(self, time):
-        if self.get_burn_status(time):
-            return self.base_thrust_magnitude
-        else:
-            return 0.0
+    # Optional: If you need thrust magnitude separately (e.g., for logging)
+    def get_thrust_magnitude(self, throttle: float = 1.0):
+        return self.base_thrust_magnitude * max(min(throttle, 1.0), 0.0)

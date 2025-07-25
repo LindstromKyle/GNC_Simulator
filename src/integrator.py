@@ -71,6 +71,9 @@ def integrate_rk4(
         current_state += h * weighted_average
         current_time += h
 
+        # Clamp propellant
+        current_state[13] = max(current_state[13], 0)
+
         # Normalize quaternion to prevent drift
         current_state[6:10] /= np.linalg.norm(current_state[6:10])
 

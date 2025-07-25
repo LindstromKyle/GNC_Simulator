@@ -4,7 +4,7 @@ import logging
 from controller import PIDAttitudeController
 from guidance import ModeBasedGuidance
 from mission import MissionPlanner, TimeBasedPhase, KickPhase, AscentBurnPhase, CoastPhase, CircBurnPhase
-from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration, plot_3D_trajectory_segments
+from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration, plot_3D_integration_segments
 from vehicle import Vehicle
 from environment import Environment
 from state import State
@@ -103,10 +103,9 @@ if __name__ == "__main__":
     # Vehicle
     ascent_combined_stage = Vehicle(
         dry_mass=combined_dry_mass,
-        prop_mass=stage1_ascent_prop,
+        initial_prop_mass=stage1_ascent_prop,
         base_thrust_magnitude=stage1_thrust,
-        burn_duration=stage1_burn_time,
-        burn_start_time=0.0,
+        average_isp=300,
         moment_of_inertia=stage1_moi + stage2_moi,  # Approx sum; improve later
         base_drag_coefficient=stage1_cd_base,
         drag_scaling_coefficient=stage1_cd_scale,
@@ -124,6 +123,7 @@ if __name__ == "__main__":
         velocity=[0, 0, 0],
         quaternion=[1, 0, 0, 0],
         angular_velocity=[0, 0, 0],
+        propellant_mass=stage1_ascent_prop,
     )
 
     # Simulator
@@ -185,15 +185,15 @@ if __name__ == "__main__":
         velocity=burnout_state_vector[3:6],
         quaternion=burnout_state_vector[6:10],
         angular_velocity=burnout_state_vector[10:13],
+        propellant_mass=stage2_prop,
     )
 
     # Stage 2 Vehicle
     stage_2 = Vehicle(
         dry_mass=stage2_dry_mass,
-        prop_mass=stage2_prop,
+        initial_prop_mass=stage2_prop,
         base_thrust_magnitude=stage2_thrust,
-        burn_duration=stage2_burn_time,
-        burn_start_time=separation_time,  # Ignite immediately
+        average_isp=311,
         moment_of_inertia=stage2_moi,
         base_drag_coefficient=stage2_cd_base,
         drag_scaling_coefficient=stage2_cd_scale,
@@ -241,7 +241,7 @@ if __name__ == "__main__":
         (t, f"{name}") for t, name in stage2_phase_transitions
     ]
 
-    plot_3D_trajectory_segments(
+    plot_3D_integration_segments(
         [(ascent_t_vals, ascent_state_vals), (stage2_t_vals, stage2_state_vals)],
         phase_transitions=all_phase_transitions,
         show_earth=False,

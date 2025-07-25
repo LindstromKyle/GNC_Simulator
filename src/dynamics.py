@@ -9,9 +9,10 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controller=N
     velocity = state[3:6]
     quaternion = state[6:10]
     angular_velocity = state[10:13]
+    propellant_mass = state[13]
 
     # Mass
-    vehicle_mass = vehicle.mass(time)
+    vehicle_mass = vehicle.dry_mass + max(propellant_mass, 0)  # Clamp to avoid negative
 
     # Controller logic
     if controller:
@@ -23,7 +24,15 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controller=N
         throttle = 1.0
 
     # Forces
-    thrust_force, thrust_vector_torque = vehicle.thrust_vector(time, quaternion, gimbal_angles, throttle)
+    if throttle > 0 and propellant_mass > 0:
+        thrust_force, thrust_vector_torque = vehicle.thrust_vector(time, quaternion, gimbal_angles, throttle)
+        mass_flow_rate = vehicle.mdot_max * throttle
+
+    else:
+        thrust_force = np.zeros(3)
+        thrust_vector_torque = np.zeros(3)
+        mass_flow_rate = 0.0
+
     gravitational_force = environment.gravitational_force(position, vehicle_mass)
     drag_force = environment.drag_force(position, velocity, vehicle, quaternion)
     net_force = thrust_force + gravitational_force + drag_force
@@ -43,16 +52,22 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controller=N
 
     # Log state evolution
     if log_flag:
-        logging.info(f"t={time:.2f}s | pos={position} | vel={velocity} | acc={acceleration}")
         logging.info(
-            f"thrust={thrust_force} | drag={drag_force} | gravity={gravitational_force} | net force={net_force}"
+            f"t={time:.2f}s | pos={np.round(position, 2)} | vel={np.round(velocity,2)} | acc={np.round(acceleration, 2)}"
+        )
+        logging.info(
+            f"thrust={np.round(thrust_force, 2)} | drag={np.round(drag_force, 2)} | gravity={np.round(gravitational_force, 2)} | net force={np.round(net_force, 2)}"
         )
         logging.info(f"quat={quaternion} | attitude(Z)={rotate_vector_by_quaternion(np.array([0,0,1]), quaternion)}")
         logging.info(
-            f"total torque={total_torque} | angular_velocity={angular_velocity} | ang_accel={angular_acceleration}"
+            f"total torque={np.round(total_torque, 2)} | ang vel={np.round(angular_velocity, 2)} | ang acc={np.round(angular_acceleration, 2)}"
         )
-        logging.info(f"mass={vehicle_mass:.2f}")
+        logging.info(
+            f"total mass={vehicle_mass:.2f} | propellant mass={propellant_mass:.2f} | mass flow={mass_flow_rate}"
+        )
         logging.info(f"")
 
-    derivatives = np.concatenate([velocity, acceleration, quaternion_derivative, angular_acceleration])
+    derivatives = np.concatenate(
+        [velocity, acceleration, quaternion_derivative, angular_acceleration, [-mass_flow_rate]]
+    )
     return derivatives

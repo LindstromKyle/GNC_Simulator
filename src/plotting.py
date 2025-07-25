@@ -88,30 +88,32 @@ def plot_1D_position_velocity_acceleration(t_vals, state_vals, axis, environment
     plt.show()
 
 
-def plot_3D_trajectory_segments(segments, phase_transitions=None, show_earth=False):
+def plot_3D_integration_segments(integration_segments, phase_transitions=None, show_earth=False):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
 
     # Define colors for phases (extend as needed)
     phase_colors = {
-        "Ascent: radial": "blue",
-        "Ascent: kick": "green",
-        "Ascent: prograde": "cyan",
-        "Stage 2: ascent_burn": "orange",
-        "Stage 2: coast": "purple",
-        "Stage 2: circ_burn": "red",
+        "Initial Ascent": "blue",
+        "Kick": "green",
+        "Prograde Stage 1": "cyan",
+        "Prograde Stage 2": "orange",
+        "Coast": "purple",
+        "Circularization": "red",
     }
 
-    for t_vals, state_vals in segments:
+    for t_vals, state_vals in integration_segments:
         x_vals = state_vals[:, 0] / 1000
         y_vals = state_vals[:, 1] / 1000
-        z_vals = state_vals[:, 2] / 1000
+        z_vals = state_vals[:, 2] / 1000 - 6371.000
 
         if phase_transitions:
             # Segment by phase transitions
-            for i, (start_time, phase_name) in enumerate(phase_transitions):
-                end_time = phase_transitions[i + 1][0] if i + 1 < len(phase_transitions) else t_vals[-1]
-                mask = (t_vals >= start_time) & (t_vals <= end_time)
+            for phase_index, (start_time, phase_name) in enumerate(phase_transitions):
+                end_time = (
+                    phase_transitions[phase_index + 1][0] if phase_index + 1 < len(phase_transitions) else t_vals[-1]
+                )
+                mask = (t_vals >= start_time) & (t_vals < end_time)
                 if np.any(mask):
                     ax.plot3D(
                         x_vals[mask],
@@ -132,17 +134,22 @@ def plot_3D_trajectory_segments(segments, phase_transitions=None, show_earth=Fal
                 color="dodgerblue",
             )
 
-        ax.scatter(
-            [x_vals[0]], [y_vals[0]], [z_vals[0]], color="green", label="Launch" if t_vals[0] == 0 else None, s=50
-        )
-        ax.scatter(
-            [x_vals[-1]],
-            [y_vals[-1]],
-            [z_vals[-1]],
-            color="red",
-            label="Final point" if t_vals[-1] >= t_vals[-1] else None,
-            s=50,
-        )
+    ax.scatter(
+        integration_segments[0][1][0][0] / 1000,
+        integration_segments[0][1][0][1] / 1000,
+        integration_segments[0][1][0][2] / 1000 - 6371.000,
+        color="green",
+        label="Launch",
+        s=50,
+    )
+    # ax.scatter(
+    #     [x_vals[-1]],
+    #     [y_vals[-1]],
+    #     [z_vals[-1]],
+    #     color="red",
+    #     label="Final point" if t_vals[-1] >= t_vals[-1] else None,
+    #     s=50,
+    # )
 
     ax.set_xlabel("X (km)")
     ax.set_ylabel("Y (km)")

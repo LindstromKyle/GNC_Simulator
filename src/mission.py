@@ -139,7 +139,7 @@ class MissionPlanner:
                 logging.info(f"Phase transition to {self.phases[self.current_phase_idx].name} at t={time:.2f}")
                 self.phase_transitions.append((time, self.phases[self.current_phase_idx].name))
             else:
-                logging.info(f"Mission complete at t={time:.2f}")
+                logging.info(f"Integration segment complete at t={time:.2f}")
                 return {"throttle": 0.0, "attitude_mode": "prograde"}
             current_phase = self.phases[self.current_phase_idx]
         return current_phase.get_setpoints()

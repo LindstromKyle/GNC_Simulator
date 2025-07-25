@@ -30,7 +30,7 @@ def test_drag_force_zero_velocity():
     env = Environment()
     vehicle = Vehicle(
         dry_mass=25600,
-        prop_mass=395700,
+        initial_prop_mass=395700,
         thrust_magnitude=7200000,
         burn_duration=162,
         moment_of_inertia=np.diag([470297, 470297, 705445]),
@@ -51,7 +51,7 @@ def test_drag_force_magnitude():
     env = Environment()
     vehicle = Vehicle(
         dry_mass=25600,
-        prop_mass=395700,
+        initial_prop_mass=395700,
         thrust_magnitude=7200000,
         burn_duration=162,
         moment_of_inertia=np.diag([470297, 470297, 705445]),
