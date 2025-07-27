@@ -60,15 +60,15 @@ class KickPhase(Phase):
 
 class AscentBurnPhase(Phase):
     def __init__(
-        self, target_ra: float, attitude_mode: str = "prograde", throttle: float = 1.0, name: str = "Unnamed"
+        self, target_apoapsis: float, attitude_mode: str = "prograde", throttle: float = 1.0, name: str = "Unnamed"
     ):
-        self.target_ra = target_ra
+        self.target_apoapsis = target_apoapsis
         self.attitude_mode = attitude_mode
         self.throttle = throttle
         self.name = name
 
     def is_complete(self, time: float, state_vector: np.ndarray, elements: dict | None) -> bool:
-        return elements is not None and elements["ra"] >= self.target_ra
+        return (elements is not None) and (elements["apoapsis_radius"] >= self.target_apoapsis)
 
     def get_setpoints(self) -> dict:
         return {"throttle": self.throttle, "attitude_mode": self.attitude_mode}
@@ -113,7 +113,10 @@ class CircBurnPhase(Phase):
         self.name = name
 
     def is_complete(self, time: float, state_vector: np.ndarray, elements: dict | None) -> bool:
-        return elements is not None and elements["rp"] >= elements["ra"] * self.peri_tolerance_factor
+
+        return (elements is not None) and (
+            elements["periapsis_radius"] >= elements["apoapsis_radius"] * self.peri_tolerance_factor
+        )
 
     def get_setpoints(self) -> dict:
         return {"throttle": self.throttle, "attitude_mode": self.attitude_mode}
@@ -123,6 +126,7 @@ class MissionPlanner:
     def __init__(self, phases: list[Phase], environment, start_time: float = 0.0):
         self.phases = phases
         self.current_phase_idx = 0
+        self.current_phase = phases[0]
         self.mu = environment.gravitational_constant * environment.earth_mass
         self.phase_transitions = [(start_time, phases[0].name)]
         # Inject mu to phases if needed (for CoastPhase)
@@ -132,8 +136,8 @@ class MissionPlanner:
 
     def update(self, time: float, state_vector: np.ndarray) -> dict:
         elements = compute_orbital_elements(state_vector[:3], state_vector[3:6], self.mu)
-        current_phase = self.phases[self.current_phase_idx]
-        if current_phase.is_complete(time, state_vector, elements):
+        self.current_phase = self.phases[self.current_phase_idx]
+        if self.current_phase.is_complete(time, state_vector, elements):
             self.current_phase_idx += 1
             if self.current_phase_idx < len(self.phases):
                 logging.info(f"Phase transition to {self.phases[self.current_phase_idx].name} at t={time:.2f}")
@@ -141,8 +145,8 @@ class MissionPlanner:
             else:
                 logging.info(f"Integration segment complete at t={time:.2f}")
                 return {"throttle": 0.0, "attitude_mode": "prograde"}
-            current_phase = self.phases[self.current_phase_idx]
-        return current_phase.get_setpoints()
+            self.current_phase = self.phases[self.current_phase_idx]
+        return self.current_phase.get_setpoints()
 
     def get_phase_transitions(self) -> list[tuple[float, str]]:
         return self.phase_transitions

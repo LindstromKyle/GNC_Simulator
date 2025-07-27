@@ -38,7 +38,7 @@ class PIDAttitudeController(Controller):
         kd: np.ndarray,
         guidance: Guidance,
         vehicle: Vehicle,
-        mission_planner: MissionPlanner = None,
+        mission_planner: MissionPlanner,
     ):
         """
 
@@ -61,15 +61,8 @@ class PIDAttitudeController(Controller):
     def update(self, time: float, state_vector: np.ndarray) -> dict:
         current_quaternion = state_vector[6:10]
 
-        # Get setpoints from planner if available, else default to prograde
-        if self.mission_planner:
-            mission_phase_parameters = self.mission_planner.update(time, state_vector)
-            # throttle = setpoints.get("throttle", 1.0)
-            # mode = setpoints.get("attitude_mode", "prograde")
-        else:
-            # throttle = 1.0 if self.vehicle.get_burn_status(time) else 0.0
-            # mode = "prograde"  # Default fallback
-            mission_phase_parameters = {}
+        # Get setpoints from planner
+        mission_phase_parameters = self.mission_planner.update(time, state_vector)
 
         # Throttle
         throttle = mission_phase_parameters.get("throttle", 1.0)

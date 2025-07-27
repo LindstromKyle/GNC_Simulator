@@ -49,25 +49,6 @@ class Vehicle:
         """
         return self.grid_fin_deflections
 
-    def mass(self, time: float):
-        """
-
-        Args:
-            time (float):
-
-        Returns:
-
-        """
-        if time < self.burn_start_time:
-            return self.dry_mass + self.initial_propellant_mass
-        elif self.burn_start_time <= time < self.burn_end_time:
-            self.current_propellant_mass = self.initial_propellant_mass - self.mass_flow_rate * (
-                time - self.burn_start_time
-            )
-            return self.dry_mass + self.current_propellant_mass
-        else:
-            return self.dry_mass
-
     def thrust_vector(self, time, quaternion, engine_gimbal_angles, throttle: float = 1.0):
         """
 

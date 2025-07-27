@@ -51,11 +51,7 @@ class Simulator:
             delta_t=self.delta_t,
             log_interval=self.log_interval,
             controller=self.controller,
-            mission_planner=(
-                self.controller.mission_planner
-                if self.controller and hasattr(self.controller, "mission_planner")
-                else None
-            ),
+            mission_planner=self.controller.mission_planner,
         )
 
         return t_vals, state_vals, phase_transitions
@@ -76,7 +72,7 @@ if __name__ == "__main__":
     stage1_ascent_prop = 395700
     stage1_reserve_prop = 30000  # Approx for returns burns
     stage1_thrust = 7200000
-    stage1_burn_time = 162
+    stage1_avg_isp = 300
     stage1_moi = np.diag([470297, 470297, 705445])
     stage1_cd_base = 0.3
     stage1_cd_scale = 0.2
@@ -88,14 +84,14 @@ if __name__ == "__main__":
     stage2_dry_mass = 4000
     stage2_prop = 111500
     stage2_thrust = 934000
-    stage2_burn_time = 397
+    stage2_avg_isp = 311
     stage2_moi = np.diag([10000, 10000, 20000])  # Approximate scaled
     stage2_cd_base = 0.3
     stage2_cd_scale = 2.0
     stage2_area = 7.0  # Smaller
     stage2_gimbal_limit = 5.0  # Vacuum engine
     stage2_gimbal_arm = 2.0
-    separation_time = stage1_burn_time  # For now; later based on velocity/alt
+    separation_time = 162  # For now; later based on velocity/alt
 
     # Combined vehicle for ascent
     combined_dry_mass = stage1_dry_mass + stage1_reserve_prop + stage2_dry_mass + stage2_prop
@@ -105,7 +101,7 @@ if __name__ == "__main__":
         dry_mass=combined_dry_mass,
         initial_prop_mass=stage1_ascent_prop,
         base_thrust_magnitude=stage1_thrust,
-        average_isp=300,
+        average_isp=stage1_avg_isp,
         moment_of_inertia=stage1_moi + stage2_moi,  # Approx sum; improve later
         base_drag_coefficient=stage1_cd_base,
         drag_scaling_coefficient=stage1_cd_scale,
@@ -139,7 +135,7 @@ if __name__ == "__main__":
 
     # Set up phase timing
     kick_start_time = 25.0
-    prograde_start_time = 45.0
+    prograde_start_time = 35.0
 
     # Phases
     ascent_phases = [
@@ -147,7 +143,7 @@ if __name__ == "__main__":
         KickPhase(
             end_time=prograde_start_time,
             kick_direction=np.array([1.0, 0.0, 0.0]),
-            kick_angle_deg=5.5,
+            kick_angle_deg=6,
             throttle=1.0,
             name="Kick",
         ),
@@ -193,7 +189,7 @@ if __name__ == "__main__":
         dry_mass=stage2_dry_mass,
         initial_prop_mass=stage2_prop,
         base_thrust_magnitude=stage2_thrust,
-        average_isp=311,
+        average_isp=stage2_avg_isp,
         moment_of_inertia=stage2_moi,
         base_drag_coefficient=stage2_cd_base,
         drag_scaling_coefficient=stage2_cd_scale,
@@ -203,20 +199,24 @@ if __name__ == "__main__":
     )
 
     target_alt = 200000.0
-    target_ra = target_alt + environment.earth_radius
+    target_apoapsis = target_alt + environment.earth_radius
+    simulation_end_time = separation_time + 1200
     stage2_phases = [
-        AscentBurnPhase(target_ra=target_ra, attitude_mode="prograde", throttle=1.0, name="Prograde Stage 2"),
-        CoastPhase(time_to_apo_threshold=30.0, attitude_mode="prograde", throttle=0.0, name="Coast"),
+        AscentBurnPhase(
+            target_apoapsis=target_apoapsis, attitude_mode="prograde", throttle=1.0, name="Prograde Stage 2"
+        ),
+        CoastPhase(time_to_apo_threshold=110.0, attitude_mode="prograde", throttle=0.0, name="Coast"),
         CircBurnPhase(peri_tolerance_factor=0.99, attitude_mode="prograde", throttle=1.0, name="Circularization"),
+        TimeBasedPhase(end_time=simulation_end_time, attitude_mode="prograde", throttle=0.0, name="Orbit"),
     ]
     stage2_planner = MissionPlanner(phases=stage2_phases, environment=environment, start_time=separation_time)
 
     stage2_guidance = ModeBasedGuidance()
 
     controller_stage2 = PIDAttitudeController(
-        kp=np.array([5e4, 5e4, 2e5]),  # Tune for lighter stage
-        ki=np.array([1e-3, 1e-3, 1e-3]),
-        kd=np.array([1e6, 1e6, 5e5]),
+        kp=np.array([5e1, 5e1, 2e2]),  # Tune for lighter stage
+        ki=np.array([1e-1, 1e-1, 1e-1]),
+        kd=np.array([1e3, 1e3, 5e2]),
         guidance=stage2_guidance,
         vehicle=stage_2,
         mission_planner=stage2_planner,
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         environment=environment,
         initial_state=current_state,
         t_0=separation_time,
-        t_final=separation_time + 1200,  # Enough for orbit
+        t_final=simulation_end_time,  # Enough for orbit
         delta_t=0.2,  # Larger step ok for vacuum
         log_interval=5,
     )
@@ -241,8 +241,13 @@ if __name__ == "__main__":
         (t, f"{name}") for t, name in stage2_phase_transitions
     ]
 
+    # Combine t and state vals for plotting
+    all_t_vals = np.append(ascent_t_vals, stage2_t_vals)
+    all_state_vals = np.vstack((ascent_state_vals, stage2_state_vals))
+
     plot_3D_integration_segments(
-        [(ascent_t_vals, ascent_state_vals), (stage2_t_vals, stage2_state_vals)],
+        t_vals=all_t_vals,
+        state_vals=all_state_vals,
         phase_transitions=all_phase_transitions,
-        show_earth=False,
+        show_earth=True,
     )

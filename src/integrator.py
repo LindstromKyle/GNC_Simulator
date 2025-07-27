@@ -1,10 +1,12 @@
+import logging
+
 from dynamics import calculate_dynamics
 import numpy as np
 from tqdm import tqdm
 
 
 def integrate_rk4(
-    vehicle, environment, initial_state, t_0, t_final, delta_t, log_interval, controller=None, mission_planner=None
+    vehicle, environment, initial_state, t_0, t_final, delta_t, log_interval, controller, mission_planner
 ):
 
     # Initialize starting time and position
@@ -14,8 +16,6 @@ def integrate_rk4(
     current_state = initial_state.copy()
     last_logged_time = None
     phase_transitions = []  # Collect transitions if planner provided
-    if mission_planner:
-        phase_transitions = mission_planner.get_phase_transitions()  # Initial phase
 
     # Progress bar
     max_iterations = np.floor((t_final - t_0) / delta_t)
@@ -40,6 +40,7 @@ def integrate_rk4(
             environment=environment,
             log_flag=log_flag,
             controller=controller,
+            mission_planner=mission_planner,
         )
         k_2 = calculate_dynamics(
             time=current_time + h / 2,
@@ -48,6 +49,7 @@ def integrate_rk4(
             environment=environment,
             log_flag=False,
             controller=controller,
+            mission_planner=mission_planner,
         )
         k_3 = calculate_dynamics(
             time=current_time + h / 2,
@@ -56,6 +58,7 @@ def integrate_rk4(
             environment=environment,
             log_flag=False,
             controller=controller,
+            mission_planner=mission_planner,
         )
         k_4 = calculate_dynamics(
             time=current_time + h,
@@ -64,6 +67,7 @@ def integrate_rk4(
             environment=environment,
             log_flag=False,
             controller=controller,
+            mission_planner=mission_planner,
         )
 
         # Update state and time
@@ -81,9 +85,7 @@ def integrate_rk4(
         t_values.append(current_time)
         state_values.append(current_state.copy())
 
-        # Update phase transitions
-        if mission_planner:
-            phase_transitions = mission_planner.get_phase_transitions()
+        phase_transitions = mission_planner.get_phase_transitions()
 
         # Progress bar
         p_bar.update(1)

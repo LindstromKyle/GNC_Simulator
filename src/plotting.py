@@ -88,11 +88,11 @@ def plot_1D_position_velocity_acceleration(t_vals, state_vals, axis, environment
     plt.show()
 
 
-def plot_3D_integration_segments(integration_segments, phase_transitions=None, show_earth=False):
+def plot_3D_integration_segments(t_vals, state_vals, phase_transitions=None, show_earth=False):
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
 
-    # Define colors for phases (extend as needed)
+    # Define colors for phases
     phase_colors = {
         "Initial Ascent": "blue",
         "Kick": "green",
@@ -100,56 +100,54 @@ def plot_3D_integration_segments(integration_segments, phase_transitions=None, s
         "Prograde Stage 2": "orange",
         "Coast": "purple",
         "Circularization": "red",
+        "Orbit": "black",
     }
 
-    for t_vals, state_vals in integration_segments:
-        x_vals = state_vals[:, 0] / 1000
-        y_vals = state_vals[:, 1] / 1000
-        z_vals = state_vals[:, 2] / 1000 - 6371.000
+    x_vals = state_vals[:, 0] / 1000
+    y_vals = state_vals[:, 1] / 1000
+    z_vals = state_vals[:, 2] / 1000
 
-        if phase_transitions:
-            # Segment by phase transitions
-            for phase_index, (start_time, phase_name) in enumerate(phase_transitions):
-                end_time = (
-                    phase_transitions[phase_index + 1][0] if phase_index + 1 < len(phase_transitions) else t_vals[-1]
-                )
-                mask = (t_vals >= start_time) & (t_vals < end_time)
-                if np.any(mask):
-                    ax.plot3D(
-                        x_vals[mask],
-                        y_vals[mask],
-                        z_vals[mask],
-                        label=phase_name,
-                        linewidth=2,
-                        color=phase_colors.get(phase_name, "gray"),
-                    )
-        else:
-            # Fallback: Plot whole segment
-            ax.plot3D(
-                x_vals,
-                y_vals,
-                z_vals,
-                label="Trajectory",
-                linewidth=2,
-                color="dodgerblue",
+    if phase_transitions:
+        # Segment by phase transitions
+        for phase_index, (start_time, phase_name) in enumerate(phase_transitions):
+            end_time = (
+                phase_transitions[phase_index + 1][0] if phase_index + 1 < len(phase_transitions) else t_vals[-1]
             )
 
-    ax.scatter(
-        integration_segments[0][1][0][0] / 1000,
-        integration_segments[0][1][0][1] / 1000,
-        integration_segments[0][1][0][2] / 1000 - 6371.000,
-        color="green",
-        label="Launch",
-        s=50,
-    )
-    # ax.scatter(
-    #     [x_vals[-1]],
-    #     [y_vals[-1]],
-    #     [z_vals[-1]],
-    #     color="red",
-    #     label="Final point" if t_vals[-1] >= t_vals[-1] else None,
-    #     s=50,
-    # )
+            mask = (t_vals >= start_time) & (t_vals < end_time)
+            if np.any(mask):
+
+                ax.plot3D(
+                    x_vals[mask],
+                    y_vals[mask],
+                    z_vals[mask],
+                    label=phase_name,
+                    linewidth=2,
+                    color=phase_colors.get(phase_name, "gray"),
+                )
+    else:
+        # Fallback: Plot whole segment
+        ax.plot3D(
+            x_vals,
+            y_vals,
+            z_vals,
+            label="Trajectory",
+            linewidth=2,
+            color="dodgerblue",
+        )
+
+    if show_earth:
+        # Add Earth as a low-resolution wireframe sphere for efficiency
+        earth_radius = 6371  # km
+        u = np.linspace(0, 2 * np.pi, 40)  # Low res: 20 longitude points
+        v = np.linspace(0, np.pi, 20)  # Low res: 10 latitude points
+        x = earth_radius * np.outer(np.cos(u), np.sin(v))
+        y = earth_radius * np.outer(np.sin(u), np.sin(v))
+        z = earth_radius * np.outer(np.ones(np.size(u)), np.cos(v))
+        ax.plot_wireframe(x, y, z, color="blue", rstride=2, cstride=2)  # Strides skip lines for even less lag
+
+        # Optional: For a solid sphere (potentially laggier), replace plot_wireframe with:
+        # ax.plot_surface(x, y, z, color='lightblue', alpha=1)
 
     ax.set_xlabel("X (km)")
     ax.set_ylabel("Y (km)")
