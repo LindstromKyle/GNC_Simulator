@@ -87,8 +87,12 @@ def quaternion_inverse(q: np.ndarray) -> np.ndarray:
 
 
 def quat_to_angle_axis(q: np.ndarray) -> np.ndarray:
-    angle = 2 * np.arccos(q[0])
-    if angle == 0:
+    q /= np.linalg.norm(q)
+    # Check for rotations greater than 180 deg - flip quaternion for minimal angle
+    if q[0] < 0:
+        q = -q
+    angle = 2 * np.arccos(np.clip(q[0], -1.0, 1.0))
+    if np.sin(angle / 2) < 1e-10:  # Near-zero angle:
         return np.array([0, 0, 0, 0])  # No rotation
     axis = q[1:] / np.sin(angle / 2)
     return np.append(angle, axis)

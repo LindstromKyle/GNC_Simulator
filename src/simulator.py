@@ -5,29 +5,26 @@ from controller import PIDAttitudeController
 from guidance import ModeBasedGuidance
 from mission import MissionPlanner, TimeBasedPhase, KickPhase, AscentBurnPhase, CoastPhase, CircBurnPhase
 from plotting import plot_3D_trajectory, plot_1D_position_velocity_acceleration, plot_3D_integration_segments
+from utils import compute_minimal_quaternion_rotation
 from vehicle import Vehicle
 from environment import Environment
 from state import State
 from integrator import integrate_rk4
 
-logging.basicConfig(
-    filename="simulation.log",
-    level=logging.INFO,  # Use DEBUG for more detail
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    filemode="w",  # Overwrite log file each run
-)
-
 
 class Simulator:
+
     def __init__(
         self,
         vehicle,
         environment,
         initial_state,
+        mission_planner,
         t_0=0,
         t_final=2000,
         delta_t=0.5,
         log_interval: float = 1,
+        log_name: str = "simulation",
     ):
         self.vehicle = vehicle
         self.environment = environment
@@ -37,11 +34,19 @@ class Simulator:
         self.delta_t = delta_t
         self.log_interval = log_interval
         self.controller = None  # To be set later
+        self.mission_planner = mission_planner
+        self.log_name = log_name
 
     def add_controller(self, controller):
         self.controller = controller
 
     def run(self):
+        logging.basicConfig(
+            filename=f"../logs/{self.log_name}.log",
+            level=logging.INFO,  # Use DEBUG for more detail
+            format="[%(levelname)s] %(message)s",
+            filemode="w",  # Overwrite log file each run
+        )
         t_vals, state_vals, phase_transitions = integrate_rk4(
             vehicle=self.vehicle,
             environment=self.environment,
@@ -51,7 +56,7 @@ class Simulator:
             delta_t=self.delta_t,
             log_interval=self.log_interval,
             controller=self.controller,
-            mission_planner=self.controller.mission_planner,
+            mission_planner=self.mission_planner,
         )
 
         return t_vals, state_vals, phase_transitions
@@ -71,7 +76,7 @@ if __name__ == "__main__":
     stage1_dry_mass = 25600
     stage1_ascent_prop = 395700
     stage1_reserve_prop = 30000  # Approx for returns burns
-    stage1_thrust = 7200000
+    stage1_thrust = 7600000
     stage1_avg_isp = 300
     stage1_moi = np.diag([470297, 470297, 705445])
     stage1_cd_base = 0.3
@@ -113,24 +118,29 @@ if __name__ == "__main__":
     # Environment
     environment = Environment()
 
+    # Launch site parameters
+    launch_latitude_deg = 28.5  # Cape Canaveral
+    launch_latitude_rad = np.deg2rad(launch_latitude_deg)
+
+    # Initial position (ECI frame, longitude=0 for simplicity)
+    cos_lat = np.cos(launch_latitude_rad)
+    sin_lat = np.sin(launch_latitude_rad)
+    initial_position = environment.earth_radius * np.array([cos_lat, 0.0, sin_lat])
+
+    # Initial velocity: due to Earth's rotation (at rest relative to ground)
+    omega_cross_r = np.cross(environment.earth_angular_velocity_vector, initial_position)
+
+    # Initial quaternion: align body Z with local vertical (radial unit vector)
+    radial_unit_vector = initial_position / np.linalg.norm(initial_position)
+    initial_quaternion = compute_minimal_quaternion_rotation(radial_unit_vector)
+
     # State
     initial_state = State(
-        position=[0, 0, environment.earth_radius],
-        velocity=[0, 0, 0],
-        quaternion=[1, 0, 0, 0],
+        position=initial_position,
+        velocity=omega_cross_r,
+        quaternion=initial_quaternion,
         angular_velocity=[0, 0, 0],
         propellant_mass=stage1_ascent_prop,
-    )
-
-    # Simulator
-    ascent_sim = Simulator(
-        vehicle=ascent_combined_stage,
-        environment=environment,
-        initial_state=initial_state,
-        t_0=0,
-        t_final=separation_time,
-        delta_t=0.1,
-        log_interval=1,
     )
 
     # Set up phase timing
@@ -142,7 +152,7 @@ if __name__ == "__main__":
         TimeBasedPhase(end_time=kick_start_time, attitude_mode="radial", throttle=1.0, name="Initial Ascent"),
         KickPhase(
             end_time=prograde_start_time,
-            kick_direction=np.array([1.0, 0.0, 0.0]),
+            kick_direction=np.array([0.0, 1.0, 0.0]),
             kick_angle_deg=6,
             throttle=1.0,
             name="Kick",
@@ -158,12 +168,23 @@ if __name__ == "__main__":
 
     # Controller
     ascent_controller = PIDAttitudeController(
-        kp=np.array([8e4, 8e4, 3e5]),
-        ki=np.array([1e-2, 1e-2, 1e-2]),
-        kd=np.array([2e6, 2e6, 1e6]),
+        kp=np.array([1.2e5, 1.2e5, 1.8e5]),
+        ki=np.array([0.1, 0.1, 0.1]),
+        kd=np.array([3.4e5, 3.4e5, 5.1e5]),
         guidance=ascent_guidance,
-        vehicle=ascent_sim.vehicle,
+        vehicle=ascent_combined_stage,
+    )
+
+    # Simulator
+    ascent_sim = Simulator(
+        vehicle=ascent_combined_stage,
+        environment=environment,
+        initial_state=initial_state,
         mission_planner=ascent_planner,
+        t_0=0,
+        t_final=separation_time,
+        delta_t=0.1,
+        log_interval=0.5,
     )
     ascent_sim.add_controller(ascent_controller)
 
@@ -214,18 +235,18 @@ if __name__ == "__main__":
     stage2_guidance = ModeBasedGuidance()
 
     controller_stage2 = PIDAttitudeController(
-        kp=np.array([5e1, 5e1, 2e2]),  # Tune for lighter stage
-        ki=np.array([1e-1, 1e-1, 1e-1]),
-        kd=np.array([1e3, 1e3, 5e2]),
+        kp=np.array([9e4, 9e4, 1.8e5]),  # Tune for lighter stage
+        ki=np.array([0.1, 0.1, 0.1]),
+        kd=np.array([4.2e4, 4.2e4, 8.4e4]),
         guidance=stage2_guidance,
         vehicle=stage_2,
-        mission_planner=stage2_planner,
     )
 
     sim_stage2 = Simulator(
         vehicle=stage_2,
         environment=environment,
         initial_state=current_state,
+        mission_planner=stage2_planner,
         t_0=separation_time,
         t_final=simulation_end_time,  # Enough for orbit
         delta_t=0.2,  # Larger step ok for vacuum
@@ -249,5 +270,5 @@ if __name__ == "__main__":
         t_vals=all_t_vals,
         state_vals=all_state_vals,
         phase_transitions=all_phase_transitions,
-        show_earth=True,
+        show_earth=False,
     )

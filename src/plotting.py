@@ -96,11 +96,12 @@ def plot_3D_integration_segments(t_vals, state_vals, phase_transitions=None, sho
     phase_colors = {
         "Initial Ascent": "blue",
         "Kick": "green",
-        "Prograde Stage 1": "cyan",
+        "Prograde Stage 1": "yellow",
         "Prograde Stage 2": "orange",
         "Coast": "purple",
         "Circularization": "red",
         "Orbit": "black",
+        "Semi-Gravity Turn Stage 1": "cyan",
     }
 
     x_vals = state_vals[:, 0] / 1000

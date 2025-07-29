@@ -4,20 +4,24 @@ import logging
 from utils import compute_quaternion_derivative, rotate_vector_by_quaternion, compute_orbital_elements
 
 
-def calculate_dynamics(time, state, vehicle, environment, log_flag, controller, mission_planner):
+def calculate_dynamics(time, state, vehicle, environment, log_flag, controls):
     position = state[0:3]
     velocity = state[3:6]
     quaternion = state[6:10]
     angular_velocity = state[10:13]
     propellant_mass = state[13]
 
+    # If we hit the ground, stop integrating
+    # if (time > 0.0) and (np.linalg.norm(position) <= environment.earth_radius):
+    #     return np.concatenate([np.zeros(3), np.zeros(3), np.array([1.0, 0.0, 0.0, 0.0]), np.zeros(3), [0.0]])
+
     # Mass
     vehicle_mass = vehicle.dry_mass + max(propellant_mass, 0)  # Clamp to avoid negative
 
     # Controller logic
-    controls = controller.update(time, state)
-    gimbal_angles = controls.get("engine_gimbal_angles", np.zeros(2))
-    throttle = controls.get("throttle", 1.0)
+    gimbal_angles = controls.get("engine_gimbal_angles")
+    throttle = controls.get("throttle")
+    desired_torque = controls.get("desired_torque")
 
     # Forces
     if throttle > 0 and propellant_mass > 0:
@@ -46,39 +50,24 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controller, 
     gyroscopic_reaction_torque = np.cross(angular_velocity, angular_momentum)
     angular_acceleration = np.linalg.inv(moment_of_inertia) @ (total_torque - gyroscopic_reaction_torque)
 
-    # Full orbital velocity (magnitude)
-    r_unit_vector = position / np.linalg.norm(position)
-    orbital_velocity = np.linalg.norm(velocity)
-    # Radial velocity
-    radial_velocity = np.dot(velocity, r_unit_vector)
-    # Tangential velocity
-    tangential_velocity = (
-        np.sqrt(orbital_velocity**2 - radial_velocity**2) if orbital_velocity**2 - radial_velocity**2 > 0.0 else 0.0
-    )
-
     # Log state evolution
     if log_flag:
-        logging.info(f"Phase: {mission_planner.current_phase.name}")
+        logging.info(f"-----------------------------------[CONTROLLER]-------------------------------------------")
         logging.info(
-            f"t: {time:.2f}s | pos: {np.round(position, 2)} | vel: {np.round(velocity,2)} | acc: {np.round(acceleration, 2)}"
+            f"desired torque (N*m): {desired_torque} | engine gimbal angles: {gimbal_angles} | throttle: {throttle}"
         )
         logging.info(
-            f"thrust: {np.round(thrust_force, 2)} | drag: {np.round(drag_force, 2)} | gravity: {np.round(gravitational_force, 2)} | net force: {np.round(net_force, 2)}"
+            f"applied torque (N*m): {np.round(total_torque, 4)} | ang vel (rad/s): {np.round(angular_velocity, 4)} | ang acc (rad/s/s): {np.round(angular_acceleration, 4)}"
         )
-        logging.info(f"quat: {quaternion} | attitude: {rotate_vector_by_quaternion(np.array([0,0,1]), quaternion)}")
+        logging.info(f"------------------------------------[DYNAMICS]--------------------------------------------")
         logging.info(
-            f"total torque: {np.round(total_torque, 2)} | ang vel: {np.round(angular_velocity, 2)} | ang acc: {np.round(angular_acceleration, 2)}"
-        )
-        logging.info(
-            f"total mass (kg): {vehicle_mass:.2f} | propellant mass (kg): {propellant_mass:.2f} | mass flow (kg/s): {mass_flow_rate}"
+            f"pos (m): {np.round(position, 2)} | vel (m/s): {np.round(velocity,2)} | acc (m/s/s): {np.round(acceleration, 2)}"
         )
         logging.info(
-            f"orbital vel (km/s): {orbital_velocity/1000:.2f} | tangential vel (km/s): {tangential_velocity/1000:.2f} | radial vel (km/s): {radial_velocity/1000:.2f}"
+            f"thrust (N): {np.round(thrust_force, 2)} | drag (N): {np.round(drag_force, 2)} | gravity (N): {np.round(gravitational_force, 2)} | net force (N): {np.round(net_force, 2)}"
         )
-        elements = compute_orbital_elements(position, velocity, mission_planner.mu)
-        altitude = (np.linalg.norm(position) - environment.earth_radius) / 1000
         logging.info(
-            f"current altitude (km): {altitude:.2f} | apoapsis altitude (km): {((elements["apoapsis_radius"] - environment.earth_radius) / 1000):.2f} | periapsis altitude (km): {((elements["periapsis_radius"] - environment.earth_radius) / 1000):.2f}"
+            f"total mass (kg): {vehicle_mass:.2f} | propellant mass (kg): {propellant_mass:.2f} | mass flow (kg/s): {mass_flow_rate:.2f}"
         )
         logging.info(f"")
 

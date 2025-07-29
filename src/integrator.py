@@ -32,6 +32,11 @@ def integrate_rk4(
         # Calculate step size, ensure we don’t overshoot
         h = min(delta_t, t_final - current_time)
 
+        # Mission planner setpoints
+        setpoints = mission_planner.update(current_time, current_state, log_flag)
+        # Controller update
+        controls = controller.update(current_time, current_state, setpoints, log_flag)
+
         # Calculate intermediate slopes, logging k_1 every [log_interval] seconds
         k_1 = calculate_dynamics(
             time=current_time,
@@ -39,8 +44,7 @@ def integrate_rk4(
             vehicle=vehicle,
             environment=environment,
             log_flag=log_flag,
-            controller=controller,
-            mission_planner=mission_planner,
+            controls=controls,
         )
         k_2 = calculate_dynamics(
             time=current_time + h / 2,
@@ -48,8 +52,7 @@ def integrate_rk4(
             vehicle=vehicle,
             environment=environment,
             log_flag=False,
-            controller=controller,
-            mission_planner=mission_planner,
+            controls=controls,
         )
         k_3 = calculate_dynamics(
             time=current_time + h / 2,
@@ -57,8 +60,7 @@ def integrate_rk4(
             vehicle=vehicle,
             environment=environment,
             log_flag=False,
-            controller=controller,
-            mission_planner=mission_planner,
+            controls=controls,
         )
         k_4 = calculate_dynamics(
             time=current_time + h,
@@ -66,8 +68,7 @@ def integrate_rk4(
             vehicle=vehicle,
             environment=environment,
             log_flag=False,
-            controller=controller,
-            mission_planner=mission_planner,
+            controls=controls,
         )
 
         # Update state and time
