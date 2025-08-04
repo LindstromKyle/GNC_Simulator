@@ -1,3 +1,5 @@
+from typing import Union
+
 import numpy as np
 import re
 import matplotlib.pyplot as plt
@@ -46,20 +48,42 @@ def parse_log_to_structured_array(filename):
             parts = [p.strip() for p in quat_line.split("|")]
             quat_str = re.search(r"current quat: \[(.*?)\]", parts[0]).group(1)
             record["current_quat"] = np.fromstring(quat_str, sep=" ")
-            att_str = re.search(r"attitude: \[(.*?)\]", parts[1]).group(1)
+            att_str = re.search(r"current attitude \(z_hat\): \[(.*?)\]", parts[1]).group(1)
             record["attitude"] = np.fromstring(att_str, sep=" ")
 
             i += 1
             des_quat_line = lines[i][6:].strip()
-            des_quat_str = re.search(r"desired quat: \[(.*?)\]", des_quat_line).group(1)
+            parts = [p.strip() for p in des_quat_line.split("|")]
+            des_quat_str = re.search(r"desired quat: \[(.*?)\]", parts[0]).group(1)
             record["desired_quat"] = np.fromstring(des_quat_str, sep=" ")
+            des_att_str = re.search(r"desired attitude \(z_hat\): \[(.*?)\]", parts[1]).group(1)
+            record["desired_attitude"] = np.fromstring(des_att_str, sep=" ")
 
             i += 1
             err_line = lines[i][6:].strip()
             parts = [p.strip() for p in err_line.split("|")]
             err_quat_str = re.search(r"error quat: \[(.*?)\]", parts[0]).group(1)
             record["error_quat"] = np.fromstring(err_quat_str, sep=" ")
-            record["error_angle"] = float(re.search(r"error angle \(deg\): ([-.\deE]+)", parts[1]).group(1))
+            err_att_str = re.search(r"error attitude \(z_hat\): \[(.*?)\]", parts[1]).group(1)
+            record["error_attitude"] = np.fromstring(err_att_str, sep=" ")
+
+            i += 1
+            current_pitch_line = lines[i][6:].strip()
+            record["current_pitch"] = float(
+                re.search(r"current pitch \(deg\): ([-.\deE]+)", current_pitch_line).group(1)
+            )
+
+            i += 1
+            desired_pitch_line = lines[i][6:].strip()
+            record["desired_pitch"] = float(
+                re.search(r"desired pitch \(deg\): ([-.\deE]+)", desired_pitch_line).group(1)
+            )
+
+            i += 1
+            pitch_error_line = lines[i][6:].strip()
+            parts = [p.strip() for p in pitch_error_line.split("|")]
+            record["pitch_error"] = float(re.search(r"pitch error \(deg\): ([-.\deE]+)", parts[0]).group(1))
+            record["error_angle"] = float(re.search(r"quat error angle \(deg\): ([-.\deE]+)", parts[1]).group(1))
 
             # Skip to CONTROLLER
             while i < len(lines) and "CONTROLLER" not in lines[i]:
@@ -72,9 +96,7 @@ def parse_log_to_structured_array(filename):
             parts = [p.strip() for p in torque_line.split("|")]
             des_torque_str = re.search(r"desired torque \(N\*m\): \[(.*?)\]", parts[0]).group(1)
             record["desired_torque"] = np.fromstring(des_torque_str, sep=" ")
-            gimbal_str = re.search(r"engine gimbal angles: \[(.*?)\]", parts[1]).group(1)
-            record["engine_gimbal_angles"] = np.fromstring(gimbal_str, sep=" ")
-            record["throttle"] = float(re.search(r"throttle: ([-.\deE]+)", parts[2]).group(1))
+            record["throttle"] = float(re.search(r"throttle: ([-.\deE]+)", torque_line).group(1))
 
             i += 1
             app_line = lines[i][6:].strip()
@@ -86,7 +108,20 @@ def parse_log_to_structured_array(filename):
             ang_acc_str = re.search(r"ang acc \(rad/s/s\): \[(.*?)\]", parts[2]).group(1)
             record["ang_acc"] = np.fromstring(ang_acc_str, sep=" ")
 
-            # Skip to DYNAMICS
+            # Parse gimbal angles (3 lines)
+            gimbal_angles = np.zeros((9, 2))
+            indices_list = [[0, 3, 6], [1, 4, 7], [2, 5, 8]]
+            i += 1  # First gimbal line
+            for j in range(3):
+                gimbal_line = lines[i][6:].strip()
+                angle_strs = re.findall(r"\[(.*?)\]", gimbal_line)
+                for k, angle_str in enumerate(angle_strs):
+                    gimbal_angles[indices_list[j][k]] = np.fromstring(angle_str, sep=" ")
+                i += 1
+
+            record["engine_gimbal_angles"] = gimbal_angles
+
+            # Now at [DYNAMICS]
             while i < len(lines) and "DYNAMICS" not in lines[i]:
                 i += 1
             i += 1  # Now at pos line
@@ -138,14 +173,19 @@ def parse_log_to_structured_array(filename):
         ("current_quat", np.float64, (4,)),
         ("attitude", np.float64, (3,)),
         ("desired_quat", np.float64, (4,)),
+        ("desired_attitude", np.float64, (3,)),
         ("error_quat", np.float64, (4,)),
+        ("error_attitude", np.float64, (3,)),
+        ("current_pitch", np.float64),
+        ("desired_pitch", np.float64),
+        ("pitch_error", np.float64),
         ("error_angle", np.float64),
         ("desired_torque", np.float64, (3,)),
-        ("engine_gimbal_angles", np.float64, (2,)),
         ("throttle", np.float64),
         ("applied_torque", np.float64, (3,)),
         ("ang_vel", np.float64, (3,)),
         ("ang_acc", np.float64, (3,)),
+        ("engine_gimbal_angles", np.float64, (9, 2)),
         ("pos", np.float64, (3,)),
         ("vel", np.float64, (3,)),
         ("acc", np.float64, (3,)),
@@ -185,18 +225,26 @@ def plot_six(time, y_list, labels=None):
     elif len(labels) != 6:
         raise ValueError("labels must contain exactly 6 strings")
 
-    fig, axs = plt.subplots(3, 2, sharex=True)
+    fig, axs = plt.subplots(3, 2, figsize=(15, 7.5), sharex=True)
 
     # Left column: first 3
     for i in range(3):
-        axs[i, 0].plot(time, y_list[i])
+        if len(y_list[i].shape) > 1:
+            axs[i, 0].plot(time, y_list[i], label=["X", "Y", "Z"])
+            axs[i, 0].legend(fontsize=6)
+        else:
+            axs[i, 0].plot(time, y_list[i])
         axs[i, 0].set_title(labels[i])
         axs[i, 0].set_xlabel("Time")
         axs[i, 0].tick_params(labelbottom=True)
 
     # Right column: next 3
     for i in range(3):
-        axs[i, 1].plot(time, y_list[i + 3])
+        if len(y_list[i + 3].shape) > 1:
+            axs[i, 1].plot(time, y_list[i + 3], label=["X", "Y", "Z"])
+            axs[i, 1].legend(fontsize=6)
+        else:
+            axs[i, 1].plot(time, y_list[i + 3])
         axs[i, 1].set_title(labels[i + 3])
         axs[i, 1].set_xlabel("Time")
         axs[i, 1].tick_params(labelbottom=True)
@@ -205,25 +253,181 @@ def plot_six(time, y_list, labels=None):
     plt.show()
 
 
+def plot_gimbal_angles(time, engine_gimbal_angles):
+    """
+    Plots gimbal angles for 9 engines in a 3x3 grid mimicking engine positions viewed from CoM looking down (-Z).
+
+    Parameters:
+    - time: numpy array, the time values for the x-axis
+    - engine_gimbal_angles: numpy array of shape (N, 9, 2), where N is number of time steps,
+      9 is engines (0-7 outer counterclockwise from +X, 8 center), and 2 is [x, y] angles (e.g., pitch, yaw) in degrees.
+    """
+    if engine_gimbal_angles.shape[1] != 9 or engine_gimbal_angles.shape[2] != 2:
+        raise ValueError("engine_gimbal_angles must be of shape (N, 9, 2)")
+
+    fig, axs = plt.subplots(3, 3, figsize=(15, 7.5), sharex=True, sharey=True)
+
+    # Mapping of engine index to (row, col) in 3x3 grid
+    # Viewed from CoM down (-Z): X right (+col), Y up (-row)
+    # Engine 0: +X (mid-right: row1,col2)
+    # Counterclockwise: 1: top-right (0,2), 2: top-mid (0,1), 3: top-left (0,0),
+    # 4: mid-left (1,0), 5: bottom-left (2,0), 6: bottom-mid (2,1), 7: bottom-right (2,2)
+    # 8: center (1,1)
+    engine_positions = [
+        (1, 2),  # Engine 0
+        (0, 2),  # 1
+        (0, 1),  # 2
+        (0, 0),  # 3
+        (1, 0),  # 4
+        (2, 0),  # 5
+        (2, 1),  # 6
+        (2, 2),  # 7
+        (1, 1),  # 8 (center)
+    ]
+
+    for engine_idx, (row, col) in enumerate(engine_positions):
+        ax = axs[row, col]
+        angles = engine_gimbal_angles[:, engine_idx, :]  # (N, 2)
+
+        ax.plot(time, angles[:, 0], label="X", color="blue")
+        ax.plot(time, angles[:, 1], label="Y", color="orange")
+
+        ax.set_title(f"Engine {engine_idx + 1}")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Angle (deg)")
+        ax.tick_params(labelbottom=True)
+        ax.tick_params(labelleft=True)
+        ax.legend(fontsize=6)
+        ax.grid(True)
+
+    # Hide unused axes if any (but here all 9 are used)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_exhaust_flow_directions(time_value, structured_data, exaggerate_factor):
+    """
+    Generates a 3D matplotlib plot showing the exhaust directions for 9 engines at the specified time step.
+
+    Args:
+        exaggerate_factor (float): Amount to exaggerate gimbal angles
+        time_value (float): The simulation time (s) to plot.
+        structured_data (np.ndarray): The structured array from parse_log_to_structured_array().
+    """
+    # Find the index of the closest time step
+    times = structured_data["time"]
+    idx = np.argmin(np.abs(times - time_value))
+    print(f"Plotting for closest time: {times[idx]:.2f} s")
+
+    # Get gimbal angles in degrees (9 engines x [pitch, yaw])
+    gimbal_angles_deg = structured_data["engine_gimbal_angles"][idx]
+    applied_torque = structured_data["applied_torque"][idx]
+
+    # Convert to radians and exaggerate
+    gimbal_angles_rad = np.deg2rad(gimbal_angles_deg * exaggerate_factor)
+
+    # Define engine positions in body frame (xy plane at z=0, Falcon 9-like arrangement)
+    engine_radius = 1.5  # From vehicle.py
+    theta = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+    positions = [np.array([engine_radius * np.cos(t), engine_radius * np.sin(t), 0.0]) for t in theta]
+    positions.append(np.array([0.0, 0.0, 0.0]))  # Center engine
+    positions = np.array(positions)
+
+    # Create the 3D plot
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection="3d")
+
+    arrow_length = 1.0  # Arbitrary length for visualization (m)
+
+    for i in range(9):
+        # Gimbal angles: [pitch, yaw] in rad
+        pitch_rad = gimbal_angles_rad[i, 0]
+        yaw_rad = gimbal_angles_rad[i, 1]
+
+        # Thrust direction in body frame (from vehicle.py)
+        thrust_dir_body = np.array([np.sin(yaw_rad), -np.sin(pitch_rad), np.cos(pitch_rad) * np.cos(yaw_rad)])
+        thrust_dir_body /= np.linalg.norm(thrust_dir_body)  # Normalize
+
+        # Exhaust direction is opposite to thrust (exhaust flows away from rocket)
+        exhaust_dir_body = -thrust_dir_body
+
+        # Position
+        pos = positions[i]
+
+        # Plot arrow
+        ax.quiver(
+            pos[0],
+            pos[1],
+            pos[2],
+            exhaust_dir_body[0] * arrow_length,
+            exhaust_dir_body[1] * arrow_length,
+            exhaust_dir_body[2] * arrow_length,
+            color="blue",
+            linewidth=1.5,
+            arrow_length_ratio=0.2,
+        )
+
+        # Annotation at tail
+        ax.text(pos[0], pos[1], pos[2], f"E{i+1}", color="red", fontsize=10)
+
+    # Set axis limits
+    max_r = engine_radius * 1.2
+    ax.set_xlim(-max_r, max_r)
+    ax.set_ylim(-max_r, max_r)
+    ax.set_zlim(-arrow_length * 1.2, 0.2)  # Since exhaust ~ -Z
+
+    # Labels
+    ax.set_xlabel("X (m)")
+    ax.set_ylabel("Y (m)")
+    ax.set_zlabel("Z (m)")
+
+    # Set view: +X right, +Y up, +Z out (viewing along -Z)
+    ax.view_init(elev=90, azim=-90)
+
+    # Title
+    plt.title(f"Engine Exhaust Directions at t = {times[idx]:.2f} s \n" f"Applied Torque (N*m): {applied_torque}")
+    plt.show()
+
+
+def standard_plot_vs_time(field_names: list, structured_array: np.ndarray):
+    fig, ax = plt.subplots()
+
+    for field_name in field_names:
+        ax.plot(structured_array["time"], structured_array[field_name], label=field_name)
+
+    ax.set_xlabel("Time (s)")
+    ax.set_title(f"{field_names} vs Time")
+    ax.grid(True)
+    ax.legend()
+    plt.show()
+
+
 if __name__ == "__main__":
     # Example usage:
-    array = parse_log_to_structured_array("short_ascent.log")
+    array = parse_log_to_structured_array("orbit.log")
 
     time = array["time"]
     y_list = [
-        array["desired_torque"][:, 0],
-        array["applied_torque"][:, 0],
-        array["engine_gimbal_angles"][:, 0],
+        array["desired_torque"],
+        array["applied_torque"],
+        array["net_force"],
         array["error_angle"],
-        array["ang_vel"][:, 0],
-        array["ang_vel"][:, 1],
+        array["ang_vel"],
+        array["vel"],
     ]
     labels = [
         "desired_torque (X)",
         "applied_torque (X)",
-        "engine_gimbal_angles (X)",
+        "net force (X)",
         "error_angle",
         "ang_vel (X)",
-        "ang_vel (Y)",
+        "vel",
     ]
-    plot_six(time, y_list, labels)
+
+    # plot_six(time, y_list, labels)
+
+    # plot_gimbal_angles(array["time"], array["engine_gimbal_angles"])
+
+    # plot_exhaust_flow_directions(10.2, array, exaggerate_factor=300)
+
+    standard_plot_vs_time(["desired_pitch", "current_pitch"], array)

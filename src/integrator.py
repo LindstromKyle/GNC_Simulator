@@ -73,7 +73,11 @@ def integrate_rk4(
 
         # Update state and time
         weighted_average = (k_1 + 2 * k_2 + 2 * k_3 + k_4) / 6
-        current_state += h * weighted_average
+
+        # If we hit the ground, don't change state
+        if np.linalg.norm(current_state[:3]) >= environment.earth_radius:
+            current_state += h * weighted_average
+
         current_time += h
 
         # Clamp propellant

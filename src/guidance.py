@@ -100,10 +100,10 @@ class ModeBasedGuidance(Guidance):
                 desired_z_vector /= np.linalg.norm(desired_z_vector)
 
                 # Optional: Blend towards true prograde for late phase (e.g., when progress > 0.5)
-                blend_factor = progress  # 0 early (full program), 1 late (full prograde)
-                prograde_vector = velocity / velocity_magnitude
-                desired_z_vector = (1 - blend_factor) * desired_z_vector + blend_factor * prograde_vector
-                desired_z_vector /= np.linalg.norm(desired_z_vector)
+                # blend_factor = progress  # 0 early (full program), 1 late (full prograde)
+                # prograde_vector = velocity / velocity_magnitude
+                # desired_z_vector = (1 - blend_factor) * desired_z_vector + blend_factor * prograde_vector
+                # desired_z_vector /= np.linalg.norm(desired_z_vector)
 
         else:
             raise ValueError(f"Unknown attitude mode: {mode}")

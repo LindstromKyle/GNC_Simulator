@@ -18,7 +18,10 @@ def rotate_vector_by_quaternion(vector, quaternion):
     """
     # Reorder quaternion to match scipy's format: [q1, q2, q3, q0]
     q = np.array([quaternion[1], quaternion[2], quaternion[3], quaternion[0]])
-    rotation = Rotation.from_quat(q)
+    try:
+        rotation = Rotation.from_quat(q)
+    except:
+        pass
     return np.round(rotation.apply(vector), 4)
 
 
@@ -66,7 +69,8 @@ def compute_quaternion_derivative(quaternion, angular_velocity):
             [w_z, w_y, -w_x, 0],
         ]
     )
-    return 0.5 * Omega @ quaternion
+    derivative = 0.5 * Omega @ quaternion
+    return derivative
 
 
 def quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:

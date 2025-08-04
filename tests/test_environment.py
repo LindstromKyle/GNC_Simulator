@@ -1,6 +1,6 @@
 import numpy as np
 from environment import Environment
-from vehicle import Vehicle
+from vehicle import Falcon9FirstStage
 
 
 # Constants
