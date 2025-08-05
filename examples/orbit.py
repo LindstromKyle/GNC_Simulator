@@ -6,7 +6,7 @@ from guidance import ModeBasedGuidance
 from mission import (
     TimeBasedPhase,
     KickPhase,
-    PitchProgramPhase,
+    ProgrammedPitchPhase,
     MissionPlanner,
     AscentBurnPhase,
     CoastPhase,
@@ -85,7 +85,7 @@ omega_cross_r = np.cross(environment.earth_angular_velocity_vector, initial_posi
 # Initial quaternion: align body Z with local vertical (radial unit vector)
 radial_unit_vector = initial_position / np.linalg.norm(initial_position)
 initial_quaternion = compute_minimal_quaternion_rotation(radial_unit_vector)
-kick_direction = rotate_vector_by_quaternion(np.array([0, 1, 0]), initial_quaternion)
+pitch_direction = rotate_vector_by_quaternion(np.array([0, 1, 0]), initial_quaternion)
 
 # State
 initial_state = State(
@@ -97,26 +97,17 @@ initial_state = State(
 )
 
 # Set up phase timing
-kick_start_time = 10.0
-kick_end_time = 30
-kick_angle = 5
+pitch_start_time = 10.0
 burnout_time = 162.0
 
 # Phases
 stage1_phases = [
-    TimeBasedPhase(end_time=kick_start_time, attitude_mode="radial", throttle=1.0, name="Initial Ascent"),
-    KickPhase(
-        end_time=kick_end_time,
-        kick_direction=kick_direction,
-        kick_angle_deg=kick_angle,
-        throttle=1.0,
-        name="Kick",
-    ),
-    PitchProgramPhase(
+    TimeBasedPhase(end_time=pitch_start_time, attitude_mode="radial", throttle=1.0, name="Initial Ascent"),
+    ProgrammedPitchPhase(
         end_time=burnout_time,
-        initial_pitch_deg=90 - kick_angle,
-        final_pitch_deg=20,
-        kick_direction=kick_direction,
+        initial_pitch_deg=90,
+        final_pitch_deg=45,
+        kick_direction=pitch_direction,
         throttle=1.0,
         name="Pitch Program",
     ),
@@ -128,11 +119,15 @@ stage1_planner = MissionPlanner(phases=stage1_phases, environment=environment, s
 # Guidance
 stage1_guidance = ModeBasedGuidance()
 
+stage1_p = 6e3
+stage1_i = 0.1
+stage1_d = 2e5
+
 # Controller
 stage1_controller = PIDAttitudeController(
-    kp=np.array([1e5, 1e5, 1e5]),
-    ki=np.array([0.1, 0.1, 0.1]),
-    kd=np.array([1e6, 1.0e6, 1.5e6]),
+    kp=np.array([stage1_p, stage1_p, 1.5 * stage1_p]),
+    ki=np.array([stage1_i, stage1_i, 1.5 * stage1_i]),
+    kd=np.array([stage1_d, stage1_d, 1.5 * stage1_d]),
     guidance=stage1_guidance,
     vehicle=stage1_combined_vehicle,
 )
@@ -199,9 +194,9 @@ stage2_planner = MissionPlanner(phases=stage2_phases, environment=environment, s
 stage2_guidance = ModeBasedGuidance()
 
 controller_stage2 = PIDAttitudeController(
-    kp=np.array([5e3, 5e3, 5e3]),  # Tune for lighter stage
-    ki=np.array([5, 5, 0]),
-    kd=np.array([5e4, 5e4, 5e4]),
+    kp=np.array([1000, 1000, 1000]),  # Tune for lighter stage
+    ki=np.array([1, 1, 0]),
+    kd=np.array([20000, 20000, 30000]),
     guidance=stage2_guidance,
     vehicle=stage_2,
 )

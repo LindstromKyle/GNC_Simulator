@@ -29,8 +29,8 @@ class Guidance(ABC):
 
 
 class ModeBasedGuidance(Guidance):
-    def __init__(self):
-        pass
+    def __init__(self, orbital_normal=None):
+        self.orbital_normal = orbital_normal
 
     def get_desired_quaternion(
         self, time: float, state_vector: np.ndarray, mission_planner_setpoints: dict
@@ -89,10 +89,24 @@ class ModeBasedGuidance(Guidance):
 
             else:
                 # Compute horizontal unit vector in flight plane (perpendicular to radial, towards kick direction)
-                horizontal_projection = (
-                    kick_direction - np.dot(kick_direction, radial_unit_vector) * radial_unit_vector
-                )
-                horizontal_unit_vector = horizontal_projection / np.linalg.norm(horizontal_projection)
+                if self.orbital_normal is None:
+                    horizontal_projection = (
+                        kick_direction - np.dot(kick_direction, radial_unit_vector) * radial_unit_vector
+                    )
+                    horizontal_unit = horizontal_projection / np.linalg.norm(horizontal_projection)
+                    self.orbital_normal = np.cross(radial_unit_vector, horizontal_unit)
+                    self.orbital_normal /= np.linalg.norm(self.orbital_normal)
+
+                cross_product = np.cross(self.orbital_normal, radial_unit_vector)
+                norm_cross = np.linalg.norm(cross_product)
+                if norm_cross > 1e-6:
+                    horizontal_unit_vector = cross_product / norm_cross
+                else:
+                    # Fallback if zero (unlikely)
+                    horizontal_projection = (
+                        kick_direction - np.dot(kick_direction, radial_unit_vector) * radial_unit_vector
+                    )
+                    horizontal_unit_vector = horizontal_projection / np.linalg.norm(horizontal_projection)
 
                 # Desired z: sin(pitch) vertical (radial) + cos(pitch) horizontal
                 # (For pitch from horizontal: 0° = full horizontal, 90° = full vertical)

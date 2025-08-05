@@ -88,10 +88,25 @@ def parse_log_to_structured_array(filename):
             # Skip to CONTROLLER
             while i < len(lines) and "CONTROLLER" not in lines[i]:
                 i += 1
-            i += 1  # Now at desired torque line
+            i += 1  # Now at body frame error line
 
             if i >= len(lines):
                 break
+            body_error_line = lines[i][6:].strip()
+            body_err_str = re.search(r"body frame error \(deg\): \[(.*?)\]", body_error_line).group(1)
+            record["body_frame_error"] = np.fromstring(body_err_str, sep=" ")
+
+            i += 1
+            pid_line = lines[i][6:].strip()
+            parts = [p.strip() for p in pid_line.split("|")]
+            p_str = re.search(r"PID p term: \[(.*?)\]", parts[0]).group(1)
+            record["pid_p"] = np.fromstring(p_str, sep=" ")
+            i_str = re.search(r"PID i term: \[(.*?)\]", parts[1]).group(1)
+            record["pid_i"] = np.fromstring(i_str, sep=" ")
+            d_str = re.search(r"PID d term: \[(.*?)\]", parts[2]).group(1)
+            record["pid_d"] = np.fromstring(d_str, sep=" ")
+
+            i += 1
             torque_line = lines[i][6:].strip()
             parts = [p.strip() for p in torque_line.split("|")]
             des_torque_str = re.search(r"desired torque \(N\*m\): \[(.*?)\]", parts[0]).group(1)
@@ -180,6 +195,10 @@ def parse_log_to_structured_array(filename):
         ("desired_pitch", np.float64),
         ("pitch_error", np.float64),
         ("error_angle", np.float64),
+        ("body_frame_error", np.float64, (3,)),
+        ("pid_p", np.float64, (3,)),
+        ("pid_i", np.float64, (3,)),
+        ("pid_d", np.float64, (3,)),
         ("desired_torque", np.float64, (3,)),
         ("throttle", np.float64),
         ("applied_torque", np.float64, (3,)),
@@ -404,7 +423,7 @@ def standard_plot_vs_time(field_names: list, structured_array: np.ndarray):
 
 if __name__ == "__main__":
     # Example usage:
-    array = parse_log_to_structured_array("orbit.log")
+    array = parse_log_to_structured_array("stage_2.log")
 
     time = array["time"]
     y_list = [

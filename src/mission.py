@@ -122,7 +122,7 @@ class CircBurnPhase(Phase):
         return {"throttle": self.throttle, "attitude_mode": self.attitude_mode}
 
 
-class PitchProgramPhase(Phase):
+class ProgrammedPitchPhase(Phase):
     def __init__(
         self,
         end_time: float,
@@ -142,6 +142,38 @@ class PitchProgramPhase(Phase):
 
     def is_complete(self, time: float, state_vector: np.ndarray, elements: dict | None) -> bool:
         return time >= self.end_time
+
+    def get_setpoints(self) -> dict:
+        return {
+            "throttle": self.throttle,
+            "attitude_mode": self.attitude_mode,
+            "initial_pitch_deg": self.initial_pitch_deg,
+            "final_pitch_deg": self.final_pitch_deg,
+            "kick_direction": self.kick_direction,
+            # Note: start_time and duration are added dynamically by MissionPlanner
+        }
+
+
+class TargetApoPitchPhase(Phase):
+    def __init__(
+        self,
+        target_apoapsis: float,
+        initial_pitch_deg: float,
+        final_pitch_deg: float,
+        kick_direction: np.ndarray = np.array([0.0, 1.0, 0.0]),  # Default eastward
+        throttle: float = 1.0,
+        name: str = "Pitch Program",
+    ):
+        self.target_apoapsis = target_apoapsis
+        self.initial_pitch_deg = initial_pitch_deg
+        self.final_pitch_deg = final_pitch_deg
+        self.kick_direction = kick_direction
+        self.throttle = throttle
+        self.name = name
+        self.attitude_mode = "programmed_pitch"  # Custom mode for guidance
+
+    def is_complete(self, time: float, state_vector: np.ndarray, elements: dict | None) -> bool:
+        return (elements is not None) and (elements["apoapsis_radius"] >= self.target_apoapsis)
 
     def get_setpoints(self) -> dict:
         return {
@@ -215,7 +247,7 @@ class MissionPlanner:
         # Get base setpoints from phase
         setpoints = self.current_phase.get_setpoints()
 
-        # Dynamically add start_time and duration if the phase supports it (e.g., for PitchProgramPhase)
+        # Dynamically add start_time and duration if the phase supports it (e.g., for ProgrammedPitchPhase)
         if setpoints.get("attitude_mode") == "programmed_pitch":
             start_time = self.phase_start_times[self.current_phase_idx]
             duration = self.current_phase.end_time - start_time

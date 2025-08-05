@@ -56,7 +56,6 @@ def calculate_dynamics(time, state, vehicle, environment, log_flag, controls):
 
     # Log state evolution
     if log_flag:
-        logging.info(f"-----------------------------------[CONTROLLER]-------------------------------------------")
         logging.info(f"desired torque (N*m): {np.round(desired_torque, 4)} | throttle: {throttle:.4f}")
         logging.info(
             f"applied torque (N*m): {np.round(total_torque, 4)} | ang vel (rad/s): {np.round(angular_velocity, 4)} | ang acc (rad/s/s): {np.round(angular_acceleration, 4)}"

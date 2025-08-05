@@ -55,6 +55,7 @@ class PIDAttitudeController(Controller):
         self.guidance = guidance
         self.integral_error = np.zeros(3)  # Accumulator for I term
         self.previous_error = np.zeros(3)
+        self.previous_d_term = np.zeros(3)
         self.vehicle = vehicle
         self.last_update_time = None
 
@@ -88,8 +89,8 @@ class PIDAttitudeController(Controller):
         # Basic gain scheduling
         # Example: Scale kp/kd inversely with mass (higher control authority as mass drops)
         current_mass = self.vehicle.dry_mass + current_propellant_mass
-        mass_ratio = current_mass / self.vehicle.dry_mass  # >1 early, ~1 late
         # TODO: think about this
+        # mass_ratio = current_mass / self.vehicle.dry_mass  # >1 early, ~1 late
         # kp_scheduled = self.kp / mass_ratio  # Lower early, higher late
         # kd_scheduled = self.kd / mass_ratio**0.5  # Mild scaling
         kp_scheduled = self.kp
@@ -102,6 +103,12 @@ class PIDAttitudeController(Controller):
             if dt > 0:
                 self.integral_error += current_error * dt
                 d_term = kd_scheduled * (current_error - self.previous_error) / dt
+
+        # Low pass filter on d term
+        # TODO: put alpha in __init__?
+        # alpha = 0.1
+        # d_term = alpha * d_term + (1 - alpha) * self.previous_d_term
+        # self.previous_d_term = d_term
 
         i_term = self.ki * self.integral_error
         p_term = kp_scheduled * current_error
@@ -144,8 +151,8 @@ class PIDAttitudeController(Controller):
             radial_unit_vector = position / np.linalg.norm(position)
             current_dot = np.dot(current_z_unit_vector, radial_unit_vector)
             desired_dot = np.dot(desired_z_unit_vector, radial_unit_vector)
-            current_pitch = np.rad2deg(np.pi / 2 - np.arccos(np.clip(current_dot, 0, 1.0)))
-            desired_pitch = np.rad2deg(np.pi / 2 - np.arccos(np.clip(desired_dot, 0, 1.0)))
+            current_pitch = np.rad2deg(np.pi / 2 - np.arccos(np.clip(current_dot, -1.0, 1.0)))
+            desired_pitch = np.rad2deg(np.pi / 2 - np.arccos(np.clip(desired_dot, -1.0, 1.0)))
             logging.info(f"------------------------------------[GUIDANCE]--------------------------------------------")
             logging.info(
                 f"current quat: {np.round(current_quaternion, 4)} | current attitude (z_hat): {np.round(current_z_unit_vector, 4)}"
@@ -161,7 +168,11 @@ class PIDAttitudeController(Controller):
             logging.info(
                 f"pitch error (deg): {(desired_pitch - current_pitch):.2f} | quat error angle (deg): {np.round(np.rad2deg(angle_axis[0]), 4)}"
             )
-
+            logging.info(f"-----------------------------------[CONTROLLER]-------------------------------------------")
+            logging.info(f"body frame error (deg): {np.round(np.rad2deg(current_error), 4)}")
+            logging.info(
+                f"PID p term: {np.round(p_term, 4)} | PID i term: {np.round(i_term, 4)} | PID d term: {np.round(d_term, 4)}"
+            )
         return {
             "desired_torque": control_torque,
             "engine_gimbal_angles": gimbal_angles_list,

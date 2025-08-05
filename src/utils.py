@@ -99,6 +99,12 @@ def quat_to_angle_axis(q: np.ndarray) -> np.ndarray:
     if np.sin(angle / 2) < 1e-10:  # Near-zero angle:
         return np.array([0, 0, 0, 0])  # No rotation
     axis = q[1:] / np.sin(angle / 2)
+
+    # Enforce the shortest path for large angles
+    if angle > np.pi:
+        angle = 2 * np.pi - angle
+        axis = -axis
+
     return np.append(angle, axis)
 
 

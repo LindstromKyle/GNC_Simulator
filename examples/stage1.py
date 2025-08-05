@@ -3,7 +3,7 @@ import numpy as np
 from controller import PIDAttitudeController
 from environment import Environment
 from guidance import ModeBasedGuidance
-from mission import TimeBasedPhase, KickPhase, MissionPlanner, PitchProgramPhase
+from mission import TimeBasedPhase, KickPhase, MissionPlanner, ProgrammedPitchPhase
 from plotting import plot_3D_integration_segments
 from simulator import Simulator
 from state import State
@@ -67,7 +67,7 @@ omega_cross_r = np.cross(environment.earth_angular_velocity_vector, initial_posi
 # Initial quaternion: align body Z with local vertical (radial unit vector)
 radial_unit_vector = initial_position / np.linalg.norm(initial_position)
 initial_quaternion = compute_minimal_quaternion_rotation(radial_unit_vector)
-kick_direction = rotate_vector_by_quaternion(np.array([0, 1, 0]), initial_quaternion)
+pitch_direction = rotate_vector_by_quaternion(np.array([0, 1, 0]), initial_quaternion)
 
 # State
 initial_state = State(
@@ -79,26 +79,17 @@ initial_state = State(
 )
 
 # Set up phase timing
-kick_start_time = 10.0
-kick_end_time = 30
-kick_angle = 5
+pitch_start_time = 10.0
 burnout_time = 162.0
 
 # Phases
 ascent_phases = [
-    TimeBasedPhase(end_time=kick_start_time, attitude_mode="radial", throttle=1.0, name="Initial Ascent"),
-    KickPhase(
-        end_time=kick_end_time,
-        kick_direction=kick_direction,
-        kick_angle_deg=kick_angle,
-        throttle=1.0,
-        name="Kick",
-    ),
-    PitchProgramPhase(
+    TimeBasedPhase(end_time=pitch_start_time, attitude_mode="radial", throttle=1.0, name="Initial Ascent"),
+    ProgrammedPitchPhase(
         end_time=burnout_time,
-        initial_pitch_deg=90 - kick_angle,
-        final_pitch_deg=45,
-        kick_direction=kick_direction,
+        initial_pitch_deg=90,
+        final_pitch_deg=20,
+        kick_direction=pitch_direction,
         throttle=1.0,
         name="Pitch Program",
     ),
@@ -110,11 +101,15 @@ ascent_planner = MissionPlanner(phases=ascent_phases, environment=environment, s
 # Guidance
 ascent_guidance = ModeBasedGuidance()
 
+p = 6e3
+i = 0.1
+d = 2e5
+
 # Controller
 ascent_controller = PIDAttitudeController(
-    kp=np.array([1e5, 1e5, 1e5]),
-    ki=np.array([0.1, 0.1, 0.1]),
-    kd=np.array([1e6, 1.0e6, 1.5e6]),
+    kp=np.array([p, p, 1.5 * p]),
+    ki=np.array([i, i, 1.5 * i]),
+    kd=np.array([d, d, 1.5 * d]),
     guidance=ascent_guidance,
     vehicle=ascent_combined_stage,
 )
@@ -128,8 +123,8 @@ ascent_sim = Simulator(
     t_0=0,
     t_final=162,
     delta_t=0.1,
-    log_interval=0.1,
-    log_name="short_ascent",
+    log_interval=1,
+    log_name="stage_1",
 )
 ascent_sim.add_controller(ascent_controller)
 
